@@ -1,3 +1,4 @@
+// main.go
 package main
 
 import (
@@ -8,7 +9,7 @@ import (
 
 func main() {
     config.LoadEnv()
-    app := config.NewApp()
+    app := config.NewApp()  // SEKARANG SUDAH ADA!
     port := os.Getenv("APP_PORT")
     if port == "" {
         port = "3000"

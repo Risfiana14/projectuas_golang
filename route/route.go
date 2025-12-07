@@ -2,74 +2,46 @@
 package route
 
 import (
-	"time"
-	"projectuas/app/model"
-	"projectuas/app/service"
-	"projectuas/middleware"
+    "projectuas/app/repository"
+    "projectuas/app/service"
+    "projectuas/middleware"
 
-	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
-	"database/sql"
-	"go.mongodb.org/mongo-driver/mongo"
+    "github.com/gofiber/fiber/v2"
+    "database/sql"
+    "go.mongodb.org/mongo-driver/mongo"
 )
 
-func Setup(app *fiber.App, pgDB *sql.DB, mongoClient *mongo.Client) {
-	// LOGIN (Public
-	app.Post("/login", func(c *fiber.Ctx) error {
-		type Req struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
-		}
-		var r Req
-		if err := c.BodyParser(&r); err != nil {
-			return c.Status(400).JSON(fiber.Map{"message": "Format salah"})
-		}
+func Setup(appFiber *fiber.App, pg *sql.DB, mongoClient *mongo.Client) {
+    repository.Init(pg, mongoClient)
 
-		users := map[string]string{
-			"admin":     "admin123",
-			"mahasiswa": "mhs123",
-			"dosen":     "dosen123",
-		}
+    // Public
+    appFiber.Post("/api/v1/auth/login", service.Login)
 
-		if pass, ok := users[r.Username]; ok && pass == r.Password {
-			role := r.Username
-			if role == "dosen" {
-				role = "dosen_wali"
-			}
+    // Protected
+    api := appFiber.Group("/api/v1", middleware.JWT())
+    api.Get("/profile", service.Profile)
 
-			token := jwt.NewWithClaims(jwt.SigningMethodHS256, model.Claims{
-				UserID: uuid.New(),
-				Role:   role,
-				RegisteredClaims: jwt.RegisteredClaims{
-					ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
-				},
-			})
+    // === ADMIN ONLY: Manage Users (FR-009) ===
+    admin := api.Group("", middleware.Role("admin"))
+    admin.Get("/users", service.GetUsers)
+    admin.Post("/users", service.CreateUserAdmin)
+    admin.Put("/users/:id/role", service.UpdateUserRole)
+    admin.Delete("/users/:id", service.DeleteUserAdmin)
+    admin.Get("/achievements/all", service.GetAllAchievements)
+    
+    // Mahasiswa
+    mhs := api.Group("", middleware.Role("mahasiswa"))
+    mhs.Post("/achievements", service.CreateAchievement)
+    mhs.Get("/achievements", service.GetMyAchievements)
+    mhs.Get("/achievements/:id", service.GetAchievementDetail)
+    mhs.Put("/achievements/:id", service.UpdateAchievement)
+    mhs.Delete("/achievements/:id", service.DeleteAchievement)
+    mhs.Post("/achievements/:id/submit", service.SubmitAchievement)
 
-			signed, _ := token.SignedString([]byte("superrahasia123456789"))
-			return c.JSON(fiber.Map{
-				"message":      "Login berhasil!",
-				"access_token": signed,
-				"role":         role,
-			})
-		}
-		return c.Status(401).JSON(fiber.Map{"message": "Username/password salah"})
-	})
+    // Dosen Wali
+    dosen := api.Group("", middleware.Role("dosen_wali"))
+    dosen.Get("/achievements/pending", service.GetPendingAchievements)
+    dosen.Post("/achievements/:id/verify", service.VerifyAchievement)
+    dosen.Post("/achievements/:id/reject", service.RejectAchievement)
 
-	// API dengan JWT
-	api := app.Group("/api", middleware.JWT())
-
-	// Hanya mahasiswa & admin yang boleh hapus draft
-	api.Delete("/achievement/:id", middleware.Role("mahasiswa", "admin"), func(c *fiber.Ctx) error {
-		return service.DeleteAchievement(c, pgDB, mongoClient)
-	})
-
-	// Test token
-	api.Get("/me", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"message": "Token valid",
-			"user_id": c.Locals("user_id"),
-			"role":    c.Locals("role"),
-		})
-	})
 }

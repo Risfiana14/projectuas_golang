@@ -2,67 +2,58 @@
 package service
 
 import (
-
-	"projectuas/app/repository"
-
-	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
-	"database/sql"
-	"go.mongodb.org/mongo-driver/mongo"
+    "context"
+    "os"
+    "time"
+    "projectuas/app/model"
+    "projectuas/app/repository"
+    "github.com/gofiber/fiber/v2"
+    "github.com/google/uuid"
+    "go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// Fungsi yang sudah ada & jalan
-func DeleteAchievement(c *fiber.Ctx, pgDB *sql.DB, mongoClient *mongo.Client) error {
-	userID := c.Locals("user_id").(uuid.UUID)
-	userRole := c.Locals("role").(string)
+func CreateAchievement(c *fiber.Ctx) error {
+    userID := c.Locals("user_id").(uuid.UUID)
+    var ach model.Achievement
+    if err := c.BodyParser(&ach); err != nil {
+        return c.Status(400).JSON(fiber.Map{"error": "Invalid JSON"})
+    }
 
-	idStr := c.Params("id")
-	id, err := uuid.Parse(idStr)
-	if err != nil {
-		return c.Status(400).JSON(fiber.Map{"message": "ID tidak valid", "success": false})
-	}
+    ach.StudentID = userID
+    ach.Status = "draft"
+    ach.CreatedAt = time.Now()
+    ach.UpdatedAt = time.Now()
 
-	ref, err := repository.GetReference(pgDB, id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return c.Status(404).JSON(fiber.Map{"message": "Prestasi tidak ditemukan", "success": false})
-		}
-		return c.Status(500).JSON(fiber.Map{"message": "Error database", "success": false})
-	}
+    coll := repository.MongoClient.Database(os.Getenv("DB_NAME")).Collection("achievements")
+    res, err := coll.InsertOne(context.TODO(), ach)
+    if err != nil {
+        return c.Status(500).JSON(fiber.Map{"error": "Gagal simpan MongoDB"})
+    }
 
-	// RBAC: hanya admin atau pemilik (mahasiswa) yang boleh hapus draft
-	if userRole != "admin" {
-		if userRole == "mahasiswa" && *ref.StudentID != userID {
-			return c.Status(403).JSON(fiber.Map{"message": "Bukan prestasi Anda", "success": false})
-		}
-		if userRole == "dosen_wali" {
-			return c.Status(403).JSON(fiber.Map{"message": "Dosen tidak boleh menghapus", "success": false})
-		}
-	}
+    mongoID := res.InsertedID.(primitive.ObjectID).Hex()
+    refID := uuid.New()
 
-	if *ref.Status != "draft" {
-		return c.Status(400).JSON(fiber.Map{"message": "Hanya draft yang boleh dihapus", "success": false})
-	}
+    _, err = repository.DB.Exec(`
+        INSERT INTO achievement_references (id, student_id, mongo_achievement_id, status)
+        VALUES ($1, $2, $3, 'draft')`, refID, userID, mongoID)
+    if err != nil {
+        return c.Status(500).JSON(fiber.Map{"error": "Gagal simpan reference"})
+    }
 
-	// Hapus dari MongoDB & PostgreSQL
-	if err := repository.SoftDeleteMongo(mongoClient, *ref.MongoAchievementID); err != nil {
-		return c.Status(500).JSON(fiber.Map{"message": "Gagal hapus MongoDB", "success": false})
-	}
-	if err := repository.UpdateToDeleted(pgDB, id); err != nil {
-		return c.Status(500).JSON(fiber.Map{"message": "Gagal update PostgreSQL", "success": false})
-	}
-
-	return c.JSON(fiber.Map{"message": "Prestasi draft berhasil dihapus", "success": true})
+    return c.JSON(fiber.Map{
+        "message":  "Prestasi draft berhasil dibuat",
+        "ref_id":   refID,
+        "mongo_id": mongoID,
+    })
 }
 
-// Fungsi dummy agar route tidak error (bisa kamu isi nanti)
-func CreateAchievement(c *fiber.Ctx) error       { return c.JSON(fiber.Map{"message": "Create OK"}) }
-func GetMyAchievements(c *fiber.Ctx) error         { return c.JSON(fiber.Map{"message": "My Achievements"}) }
-func GetAchievementDetail(c *fiber.Ctx) error      { return c.JSON(fiber.Map{"message": "Detail"}) }
-func UpdateAchievement(c *fiber.Ctx) error         { return c.JSON(fiber.Map{"message": "Update OK"}) }
-func SubmitAchievement(c *fiber.Ctx) error         { return c.JSON(fiber.Map{"message": "Submitted"}) }
-func GetPendingAchievements(c *fiber.Ctx) error       { return c.JSON(fiber.Map{"message": "Pending List"}) }
-func VerifyAchievement(c *fiber.Ctx) error         { return c.JSON(fiber.Map{"message": "Verified"}) }
-func RejectAchievement(c *fiber.Ctx) error         { return c.JSON(fiber.Map{"message": "Rejected"}) }
-func GetAllAchievements(c *fiber.Ctx) error        { return c.JSON(fiber.Map{"message": "All Achievements"}) }
-func GetDashboardStats(c *fiber.Ctx) error         { return c.JSON(fiber.Map{"stats": "100 prestasi"}) }
+// Dummy handler (biar route tidak error)
+func GetMyAchievements(c *fiber.Ctx) error      { return c.JSON(fiber.Map{"message": "Daftar prestasi saya"}) }
+func GetAchievementDetail(c *fiber.Ctx) error   { return c.JSON(fiber.Map{"message": "Detail"}) }
+func UpdateAchievement(c *fiber.Ctx) error      { return c.JSON(fiber.Map{"message": "Updated"}) }
+func DeleteAchievement(c *fiber.Ctx) error      { return c.JSON(fiber.Map{"message": "Deleted"}) }
+func SubmitAchievement(c *fiber.Ctx) error      { return c.JSON(fiber.Map{"message": "Submitted"}) }
+func GetPendingAchievements(c *fiber.Ctx) error { return c.JSON(fiber.Map{"message": "Pending list"}) }
+func VerifyAchievement(c *fiber.Ctx) error      { return c.JSON(fiber.Map{"message": "Verified"}) }
+func RejectAchievement(c *fiber.Ctx) error      { return c.JSON(fiber.Map{"message": "Rejected"}) }
+func GetAllAchievements(c *fiber.Ctx) error     { return c.JSON(fiber.Map{"message": "All achievements"}) }

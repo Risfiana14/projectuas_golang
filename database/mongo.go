@@ -1,23 +1,28 @@
+// database/mongo.go
 package database
 
 import (
-	"context"
-	"log"
-	"os"
-	"time"
+    "context"
+    "log"
+    "os"
+    "time"
 
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+    "go.mongodb.org/mongo-driver/mongo"
+    "go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func ConnectMongo() *mongo.Client {
-	uri := os.Getenv("MONGO_URI")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+    ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+    client, err := mongo.Connect(ctx, options.Client().ApplyURI(os.Getenv("MONGO_URI")))
+    if err != nil {
+        log.Fatal("MongoDB gagal connect:", err)
+    }
 
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
-	if err != nil {
-		log.Fatal(err)
-	}
-	return client
+    err = client.Ping(ctx, nil)
+    if err != nil {
+        log.Fatal("MongoDB tidak respons:", err)
+    }
+
+    log.Println("MongoDB berhasil terkoneksi")
+    return client
 }
