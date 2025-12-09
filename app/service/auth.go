@@ -2,7 +2,7 @@
 package service
 
 import (
-    "log" // TAMBAHKAN INI UNTUK DEBUG
+    "log"
     "os"
     "time"
     "projectuas/app/model"
@@ -20,42 +20,42 @@ func Login(c *fiber.Ctx) error {
 
     var req LoginRequest
     if err := c.BodyParser(&req); err != nil {
+        log.Println("ERROR: Body parser:", err)
         return c.Status(400).JSON(fiber.Map{"status": "error", "message": "Format salah"})
     }
 
-    // INI YANG KRUSIAL — CEK user != nil DAN err
-   user, err := repository.GetUserByUsername(req.Username)
+    log.Println("LOGIN REQUEST:", req.Username)
+
+    user, err := repository.GetUserByUsername(req.Username)
     if err != nil {
-    return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Server error"})
+        log.Println("ERROR GET USER:", err)
+        return c.Status(401).JSON(fiber.Map{"status": "error", "message": "Username atau password salah"})
     }
+
     if user == nil {
+        log.Println("USER TIDAK DITEMUKAN:", req.Username)
         return c.Status(401).JSON(fiber.Map{"status": "error", "message": "Username atau password salah"})
     }
 
-    log.Println("USER DITEMUKAN:", user.Username) // DEBUG
+    log.Println("USER DITEMUKAN:", user.Username)
+    log.Println("HASH DARI DB:", user.PasswordHash)
 
-    // Bandingkan password
-    err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password))
-    if err != nil {
-        log.Println("PASSWORD SALAH UNTUK:", req.Username) // DEBUG
+    if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+        log.Println("PASSWORD SALAH:", err)
         return c.Status(401).JSON(fiber.Map{"status": "error", "message": "Username atau password salah"})
     }
 
-    log.Println("LOGIN BERHASIL:", req.Username) // DEBUG
+    log.Println("LOGIN BERHASIL:", req.Username)
 
-    // Buat token
     token := jwt.NewWithClaims(jwt.SigningMethodHS256, model.Claims{
         UserID: user.ID,
-        Role:   user.Role,
+        Role:   user.RoleID.String(),
         RegisteredClaims: jwt.RegisteredClaims{
             ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
         },
     })
 
-    tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
-    if err != nil {
-        return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Gagal buat token"})
-    }
+    tokenString, _ := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
 
     return c.JSON(fiber.Map{
         "status": "success",
@@ -65,7 +65,7 @@ func Login(c *fiber.Ctx) error {
                 "id":       user.ID.String(),
                 "username": user.Username,
                 "fullName": user.FullName,
-                "role":     user.Role,
+                "role":     user.RoleID,
             },
         },
     })
