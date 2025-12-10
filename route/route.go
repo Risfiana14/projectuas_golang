@@ -16,7 +16,11 @@ func Setup(app *fiber.App) {
     repository.InitMongo(mongoClient)
 
     // PUBLIC
-    app.Post("/api/v1/auth/login", service.Login)
+    auth := app.Group("/api/v1/auth")
+
+    auth.Post("/login", service.Login)
+    auth.Post("/logout", service.Logout)
+    auth.Post("/refresh", service.Refresh)
 
     // PROTECTED
     api := app.Group("/api/v1", middleware.JWT())

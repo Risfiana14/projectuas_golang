@@ -4,6 +4,7 @@ package service
 import (
     "log"
     "os"
+    "strings"
     "time"
     "projectuas/app/model"
     "projectuas/app/repository"
@@ -83,6 +84,53 @@ func Login(c *fiber.Ctx) error {
                 "role":        role.Name,
                 "permissions": permissions,
             },
+        },
+    })
+}
+
+func Logout(c *fiber.Ctx) error {
+    authHeader := c.Get("Authorization")
+    if authHeader == "" {
+        return c.Status(401).JSON(fiber.Map{"error": "Missing Authorization header"})
+    }
+    
+    _ = strings.TrimPrefix(authHeader, "Bearer ")
+
+    return c.JSON(fiber.Map{"status": "success", "message": "Logout berhasil"})
+}
+
+func Refresh(c *fiber.Ctx) error {
+    authHeader := c.Get("Authorization")
+    if authHeader == "" {
+        return c.Status(401).JSON(fiber.Map{"error": "Missing Authorization header"})
+    }
+
+    tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+
+    token, err := jwt.ParseWithClaims(tokenString, &model.Claims{}, func(t *jwt.Token) (interface{}, error) {
+        return []byte(os.Getenv("JWT_SECRET")), nil
+    })
+
+    if err != nil || !token.Valid {
+        return c.Status(401).JSON(fiber.Map{"error": "Token invalid"})
+    }
+
+    claims := token.Claims.(*model.Claims)
+
+    newToken := jwt.NewWithClaims(jwt.SigningMethodHS256, model.Claims{
+        UserID: claims.UserID,
+        Role:   claims.Role,
+        RegisteredClaims: jwt.RegisteredClaims{
+            ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+        },
+    })
+
+    newTokenString, _ := newToken.SignedString([]byte(os.Getenv("JWT_SECRET")))
+
+    return c.JSON(fiber.Map{
+        "status": "success",
+        "data": fiber.Map{
+            "token": newTokenString,
         },
     })
 }
