@@ -1,53 +1,74 @@
 package route
 
 import (
-    "github.com/gofiber/fiber/v2"
-    "projectuas/app/service"
-    "projectuas/middleware"
-    "projectuas/database"
-    "projectuas/app/repository"
+	"github.com/gofiber/fiber/v2"
+	"projectuas/app/service"
+	"projectuas/middleware"
+	"projectuas/database"
+	"projectuas/app/repository"
 )
 
 func Setup(app *fiber.App) {
 
-    // Database
-    database.ConnectPostgres()
-    mongoClient := database.ConnectMongo()
-    repository.InitMongo(mongoClient)
+	// Database
+	database.ConnectPostgres()
+	mongoClient := database.ConnectMongo()
+	repository.InitMongo(mongoClient)
 
-    // PUBLIC
-    auth := app.Group("/api/v1/auth")
+	// PUBLIC AUTH
+	auth := app.Group("/api/v1/auth")
+	auth.Post("/login", service.Login)
+	auth.Post("/refresh", service.Refresh)
+	auth.Post("/logout", service.Logout)
 
-    auth.Post("/login", service.Login)
-    auth.Post("/logout", service.Logout)
-    auth.Post("/refresh", service.Refresh)
+	// PROTECTED (semua user)
+	api := app.Group("/api/v1", middleware.JWT())
+	api.Get("/auth/profile", service.Profile)
 
-    // PROTECTED
-    api := app.Group("/api/v1", middleware.JWT())
+	// USERS (ADMIN)
+	users := api.Group("/users", middleware.Role("admin"))
+	users.Get("/", service.AdminGetUsers)
+	users.Get("/:id", service.AdminGetUserDetail)
+	users.Post("/", service.AdminCreateUser)
+	users.Put("/:id", service.AdminUpdateUser)
+	users.Delete("/:id", service.AdminDeleteUser)
+	users.Put("/:id/role", service.AdminUpdateUserRole)
 
-    api.Get("/auth/profile", service.Profile)
+	// ACHIEVEMENTS (SRS)
+	achievements := api.Group("/achievements")
+	achievements.Get("/", service.GetAllAchievements)
+	achievements.Get("/:id", service.GetAchievementDetail)
+	achievements.Get("/:id/history", service.GetAchievementHistory)
+	achievements.Post("/:id/attachments", service.UploadAchievementAttachments)
 
-    // ADMIN ONLY
-    users := api.Group("/users", middleware.Role("admin"))
-    users.Get("/", service.AdminGetUsers)
-    users.Get("/:id", service.AdminGetUserDetail)
-    users.Post("/", service.AdminCreateUser)
-    users.Put("/:id", service.AdminUpdateUser)
-    users.Delete("/:id", service.AdminDeleteUser)
-    users.Put("/:id/role", service.AdminUpdateUserRole)
+	// mahasiswa only on same path
+	mhsAch := achievements.Group("/", middleware.Role("mahasiswa"))
+	mhsAch.Post("/", service.CreateAchievement)
+	mhsAch.Put("/:id", service.UpdateAchievement)
+	mhsAch.Delete("/:id", service.DeleteAchievement)
+	mhsAch.Post("/:id/submit", service.SubmitAchievement)
 
-    // MAHASISWA
-    mhs := api.Group("/achievements", middleware.Role("mahasiswa"))
-    mhs.Post("/", service.CreateAchievement)
-    mhs.Get("/", service.GetMyAchievements)
-    mhs.Get("/:id", service.GetAchievementDetail)
-    mhs.Put("/:id", service.UpdateAchievement)
-    mhs.Delete("/:id", service.DeleteAchievement)
-    mhs.Post("/:id/submit", service.SubmitAchievement)
+	// dosen wali only
+	dosenAch := achievements.Group("/", middleware.Role("dosen_wali"))
+	dosenAch.Post("/:id/verify", service.VerifyAchievement)
+	dosenAch.Post("/:id/reject", service.RejectAchievement)
+	dosenAch.Get("/pending", service.GetPendingAchievements)
 
-    // DOSEN WALI
-    dosen := api.Group("/verify", middleware.Role("dosen_wali"))
-    dosen.Get("/pending", service.GetPendingAchievements)
-    dosen.Post("/:id/verify", service.VerifyAchievement)
-    dosen.Post("/:id/reject", service.RejectAchievement)
+	// STUDENTS
+	students := api.Group("/students")
+	students.Get("/", service.GetStudents)
+	students.Get("/:id", service.GetStudentDetail)
+	students.Get("/:id/achievements", service.GetStudentAchievements)
+	// assign advisor only admin
+	students.Put("/:id/advisor", middleware.Role("admin"), service.AssignAdvisor)
+
+	// LECTURERS
+	lecturers := api.Group("/lecturers")
+	lecturers.Get("/", service.GetLecturers)
+	lecturers.Get("/:id/advisees", service.GetLecturerAdvisees)
+
+	// REPORTS (admin)
+	reports := api.Group("/reports", middleware.Role("admin"))
+	reports.Get("/statistics", service.GetAchievementStatistics)
+	reports.Get("/student/:id", service.GetStudentReport)
 }

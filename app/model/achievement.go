@@ -39,3 +39,11 @@ type AchievementRef struct {
     CreatedAt     time.Time  `db:"created_at"`
     UpdatedAt     time.Time  `db:"updated_at"`
 }
+
+type AchievementHistory struct {
+    ID      uuid.UUID
+    MongoID string
+    Action  string
+    UserID  uuid.UUID
+    Timestamp time.Time
+}
