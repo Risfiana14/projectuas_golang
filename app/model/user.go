@@ -1,18 +1,26 @@
 package model
 
-import "github.com/google/uuid"
+import (
+    "time"
+    "github.com/google/uuid"
+)
 
 type User struct {
     ID           uuid.UUID `json:"id" db:"id"`
     Username     string    `json:"username" db:"username"`
+    Email        string    `json:"email" db:"email"`
     PasswordHash string    `json:"-" db:"password_hash"`
-    FullName     string    `json:"fullName" db:"full_name"`
-    RoleID       uuid.UUID `json:"roleID" db:"role_id"`
+    FullName     string    `json:"full_name" db:"full_name"`
+    RoleID       uuid.UUID `json:"role_id" db:"role_id"`
+    IsActive     bool      `json:"is_active" db:"is_active"`
+    CreatedAt    time.Time `json:"created_at" db:"created_at"`
+    UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 }
 
 type Role struct {
     ID   uuid.UUID `json:"id" db:"id"`
     Name string    `json:"name" db:"name"`
+    Description string    `json:"description"`
 }
 
 type UserWithRole struct {

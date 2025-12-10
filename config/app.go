@@ -1,10 +1,10 @@
-// config/app.go
 package config
 
 import (
     "log"
     "projectuas/database"
     "projectuas/route"
+    "projectuas/app/repository"
 
     "github.com/gofiber/fiber/v2"
     "github.com/joho/godotenv"
@@ -28,12 +28,16 @@ func NewApp() *fiber.App {
         return c.Next()
     })
 
-    // Koneksi database
-    pgDB := database.ConnectPostgres()
+    // Koneksi Mongodb
     mongoClient := database.ConnectMongo()
+    repository.InitMongo(mongoClient)
+
+    // Koneksi Postgres
+    pg := database.ConnectPostgres()
+    repository.Init(pg) // Init repository dengan Postgres
 
     // Register semua route
-    route.Setup(app, pgDB, mongoClient)
+    route.Setup(app)
 
     return app
 }

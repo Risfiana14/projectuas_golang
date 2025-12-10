@@ -27,45 +27,61 @@ func Login(c *fiber.Ctx) error {
     log.Println("LOGIN REQUEST:", req.Username)
 
     user, err := repository.GetUserByUsername(req.Username)
-    if err != nil {
-        log.Println("ERROR GET USER:", err)
-        return c.Status(401).JSON(fiber.Map{"status": "error", "message": "Username atau password salah"})
-    }
-
-    if user == nil {
+    if err != nil || user == nil {
         log.Println("USER TIDAK DITEMUKAN:", req.Username)
         return c.Status(401).JSON(fiber.Map{"status": "error", "message": "Username atau password salah"})
     }
-
-    log.Println("USER DITEMUKAN:", user.Username)
-    log.Println("HASH DARI DB:", user.PasswordHash)
 
     if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
         log.Println("PASSWORD SALAH:", err)
         return c.Status(401).JSON(fiber.Map{"status": "error", "message": "Username atau password salah"})
     }
 
-    log.Println("LOGIN BERHASIL:", req.Username)
+    // Ambil nama role
+    role, err := repository.GetRoleByID(user.RoleID)
+    if err != nil {
+        log.Println("ERROR GET ROLE:", err)
+        return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Internal server error"})
+    }
 
+    // Ambil permissions berdasarkan role
+    permissions, err := repository.GetPermissionsByRoleID(user.RoleID)
+    if err != nil {
+        log.Println("ERROR GET PERMISSIONS:", err)
+        return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Internal server error"})
+    }
+
+    // Buat JWT token
     token := jwt.NewWithClaims(jwt.SigningMethodHS256, model.Claims{
         UserID: user.ID,
-        Role:   user.RoleID.String(),
+        Role:   role.Name, // pakai nama role
         RegisteredClaims: jwt.RegisteredClaims{
             ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
         },
     })
-
     tokenString, _ := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+
+    // Buat refresh token
+    refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, model.Claims{
+        UserID: user.ID,
+        Role:   role.Name,
+        RegisteredClaims: jwt.RegisteredClaims{
+            ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)),
+        },
+    })
+    refreshTokenString, _ := refreshToken.SignedString([]byte(os.Getenv("JWT_SECRET")))
 
     return c.JSON(fiber.Map{
         "status": "success",
         "data": fiber.Map{
-            "token": tokenString,
+            "token":        tokenString,
+            "refreshToken": refreshTokenString,
             "user": fiber.Map{
-                "id":       user.ID.String(),
-                "username": user.Username,
-                "fullName": user.FullName,
-                "role":     user.RoleID,
+                "id":          user.ID.String(),
+                "username":    user.Username,
+                "fullName":    user.FullName,
+                "role":        role.Name,
+                "permissions": permissions,
             },
         },
     })
