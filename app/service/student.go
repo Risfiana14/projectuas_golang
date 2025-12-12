@@ -24,7 +24,7 @@ func GetStudentDetail(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(http.StatusBadRequest, "invalid id")
 	}
-	st, err := repository.GetStudentByID(id)
+	st, err := repository.GetStudentByUserID(id)
 	if err != nil {
 		return fiber.NewError(http.StatusNotFound, "student not found")
 	}

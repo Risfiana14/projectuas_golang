@@ -25,18 +25,23 @@ func GetStudents() ([]model.Student, error) {
     return list, nil
 }
 
-func GetStudentByID(id uuid.UUID) (*model.Student, error) {
+func GetStudentByUserID(userID uuid.UUID) (*model.Student, error) {
     var s model.Student
     err := DB.QueryRow(`
         SELECT id, user_id, student_id, program_study, academic_year, advisor_id, created_at
-        FROM students WHERE id=$1`, id).
-        Scan(&s.ID, &s.UserID, &s.StudentID, &s.ProgramStudy, &s.AcademicYear, &s.AdvisorID, &s.CreatedAt)
+        FROM students 
+        WHERE user_id = $1
+    `, userID).Scan(
+        &s.ID, &s.UserID, &s.StudentID, &s.ProgramStudy,
+        &s.AcademicYear, &s.AdvisorID, &s.CreatedAt,
+    )
 
     if err != nil {
         return nil, err
     }
     return &s, nil
 }
+
 
 func AssignAdvisorToStudent(studentID uuid.UUID, advisorID uuid.UUID) error {
     _, err := DB.Exec(`UPDATE students SET advisor_id=$1, updated_at=$2 WHERE id=$3`,

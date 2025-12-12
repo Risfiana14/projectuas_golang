@@ -1,52 +1,279 @@
 package repository
 
 import (
-    "projectuas/app/model"
-    "github.com/google/uuid"
-    "time"
+	"database/sql"
+	"errors"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/lib/pq"
+
+	"projectuas/app/model"
 )
 
+// NOTE: file ini mengasumsikan ada var DB *sql.DB dideklarasikan di paket repository (inisialisasi di database.ConnectPostgres()).
+
+// GET ACHIEVEMENT REFS BY STUDENT ID
 func GetAchievementRefsByStudentID(studentID uuid.UUID) ([]model.AchievementRef, error) {
-    rows, err := DB.Query(`
+	rows, err := DB.Query(`
         SELECT id, student_id, mongo_achievement_id, status, submitted_at, verified_at,
                verified_by, rejection_note, created_at, updated_at
         FROM achievement_references
         WHERE student_id=$1
         ORDER BY created_at DESC
     `, studentID)
-    if err != nil {
-        return nil, err
-    }
-    defer rows.Close()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-    var list []model.AchievementRef
-    for rows.Next() {
-        var ref model.AchievementRef
-        _ = rows.Scan(&ref.ID, &ref.StudentID, &ref.MongoID, &ref.Status,
-            &ref.SubmittedAt, &ref.VerifiedAt, &ref.VerifiedBy,
-            &ref.RejectionNote, &ref.CreatedAt, &ref.UpdatedAt)
-        list = append(list, ref)
-    }
-    return list, nil
+	var list []model.AchievementRef
+	for rows.Next() {
+		var ref model.AchievementRef
+		err := rows.Scan(&ref.ID, &ref.StudentID, &ref.MongoID, &ref.Status,
+			&ref.SubmittedAt, &ref.VerifiedAt, &ref.VerifiedBy,
+			&ref.RejectionNote, &ref.CreatedAt, &ref.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, ref)
+	}
+	return list, nil
 }
 
 func CreateAchievementReference(id uuid.UUID, studentID uuid.UUID, mongoID string) error {
-    _, err := DB.Exec(`
+	_, err := DB.Exec(`
         INSERT INTO achievement_references 
         (id, student_id, mongo_achievement_id, status, created_at, updated_at)
         VALUES ($1, $2, $3, 'draft', NOW(), NOW())
     `, id, studentID, mongoID)
-    return err
+	return err
 }
 
 func UpdateAchievementRef(ref *model.AchievementRef) error {
-    _, err := DB.Exec(`
+	_, err := DB.Exec(`
         UPDATE achievement_references 
         SET status=$1, submitted_at=$2, verified_at=$3, verified_by=$4,
             rejection_note=$5, updated_at=$6
         WHERE id=$7
     `,
-        ref.Status, ref.SubmittedAt, ref.VerifiedAt, ref.VerifiedBy,
-        ref.RejectionNote, time.Now(), ref.ID)
-    return err
+		ref.Status, ref.SubmittedAt, ref.VerifiedAt, ref.VerifiedBy,
+		ref.RejectionNote, time.Now(), ref.ID)
+	return err
+}
+
+// GET REF BY ID
+func GetAchievementRefByID(id uuid.UUID) (*model.AchievementRef, error) {
+	row := DB.QueryRow(`
+		SELECT id, student_id, mongo_achievement_id, status, submitted_at, verified_at,
+		       verified_by, rejection_note, created_at, updated_at
+		FROM achievement_references
+		WHERE id=$1
+	`, id)
+
+	var ref model.AchievementRef
+	err := row.Scan(&ref.ID, &ref.StudentID, &ref.MongoID, &ref.Status,
+		&ref.SubmittedAt, &ref.VerifiedAt, &ref.VerifiedBy,
+		&ref.RejectionNote, &ref.CreatedAt, &ref.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, err
+		}
+		return nil, err
+	}
+	return &ref, nil
+}
+
+// GET REF BY USER (alias GetAchievementRefsByUser)
+func GetAchievementRefsByUser(userID uuid.UUID) ([]*model.AchievementRef, error) {
+	refs, err := GetAchievementRefsByStudentID(userID)
+	if err != nil {
+		return nil, err
+	}
+	var ptrs []*model.AchievementRef
+	for i := range refs {
+		ptrs = append(ptrs, &refs[i])
+	}
+	return ptrs, nil
+}
+
+// GET ALL REFS
+func GetAllAchievementRefs() ([]*model.AchievementRef, error) {
+	rows, err := DB.Query(`
+		SELECT id, student_id, mongo_achievement_id, status, submitted_at, verified_at,
+		       verified_by, rejection_note, created_at, updated_at
+		FROM achievement_references
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*model.AchievementRef
+	for rows.Next() {
+		var ref model.AchievementRef
+		err := rows.Scan(&ref.ID, &ref.StudentID, &ref.MongoID, &ref.Status,
+			&ref.SubmittedAt, &ref.VerifiedAt, &ref.VerifiedBy,
+			&ref.RejectionNote, &ref.CreatedAt, &ref.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, &ref)
+	}
+	return list, nil
+}
+
+// GET BY STATUS
+func GetAchievementsByStatus(status string) ([]*model.AchievementRef, error) {
+	rows, err := DB.Query(`
+		SELECT id, student_id, mongo_achievement_id, status, submitted_at, verified_at,
+		       verified_by, rejection_note, created_at, updated_at
+		FROM achievement_references
+		WHERE status=$1
+		ORDER BY submitted_at DESC
+	`, status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*model.AchievementRef
+	for rows.Next() {
+		var ref model.AchievementRef
+		err := rows.Scan(&ref.ID, &ref.StudentID, &ref.MongoID, &ref.Status,
+			&ref.SubmittedAt, &ref.VerifiedAt, &ref.VerifiedBy,
+			&ref.RejectionNote, &ref.CreatedAt, &ref.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, &ref)
+	}
+	return list, nil
+}
+
+// DELETE REFERENCE
+func DeleteAchievementRef(id uuid.UUID) error {
+	res, err := DB.Exec(`DELETE FROM achievement_references WHERE id=$1`, id)
+	if err != nil {
+		return err
+	}
+	rowsAffected, _ := res.RowsAffected()
+	if rowsAffected == 0 {
+		return errors.New("reference not found")
+	}
+	return nil
+}
+
+// ADD HISTORY
+func AddAchievementHistory(mongoID string, action string, userID uuid.UUID) error {
+	_, err := DB.Exec(`
+		INSERT INTO achievement_history (id, mongo_achievement_id, action, user_id, timestamp)
+		VALUES ($1, $2, $3, $4, $5)
+	`, uuid.New(), mongoID, action, userID, time.Now())
+	return err
+}
+
+// SAVE ATTACHMENT (dummy)
+func SaveAttachment(mongoID string, filename string, data []byte) (string, error) {
+	// dummy URL
+	url := "https://example.com/files/" + filename
+	return url, nil
+}
+
+// GET ACHIEVEMENT HISTORY (PG)
+func GetAchievementHistory(mongoID string) ([]model.AchievementHistory, error) {
+	rows, err := DB.Query(`
+        SELECT id, mongo_achievement_id, action, user_id, timestamp
+        FROM achievement_history
+        WHERE mongo_achievement_id=$1
+        ORDER BY timestamp ASC
+    `, mongoID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var history []model.AchievementHistory
+	for rows.Next() {
+		var h model.AchievementHistory
+		err := rows.Scan(&h.ID, &h.MongoID, &h.Action, &h.UserID, &h.Timestamp)
+		if err != nil {
+			return nil, err
+		}
+		history = append(history, h)
+	}
+	return history, nil
+}
+
+// Get statistics (simple)
+func GetAchievementStatistics() (map[string]int, error) {
+	rows, err := DB.Query(`
+        SELECT status, COUNT(*) 
+        FROM achievement_references
+        GROUP BY status
+    `)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	stats := make(map[string]int)
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, err
+		}
+		stats[status] = count
+	}
+	return stats, nil
+}
+
+// GET STUDENT REPORT (returns refs)
+func GetStudentReport(studentID uuid.UUID) ([]model.AchievementRef, error) {
+	return GetAchievementRefsByStudentID(studentID)
+}
+
+// Get achievements by student list
+func GetAchievementsByStudents(studentIDs []uuid.UUID) ([]*model.AchievementRef, error) {
+	if len(studentIDs) == 0 {
+		return []*model.AchievementRef{}, nil
+	}
+
+	query := `
+        SELECT id, student_id, mongo_achievement_id, status, submitted_at, verified_at,
+               verified_by, rejection_note, created_at, updated_at
+        FROM achievement_references
+        WHERE student_id = ANY($1)
+        ORDER BY created_at DESC
+    `
+
+	rows, err := DB.Query(query, pq.Array(studentIDs))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []*model.AchievementRef
+	for rows.Next() {
+		var r model.AchievementRef
+		if err := rows.Scan(&r.ID, &r.StudentID, &r.MongoID, &r.Status,
+			&r.SubmittedAt, &r.VerifiedAt, &r.VerifiedBy,
+			&r.RejectionNote, &r.CreatedAt, &r.UpdatedAt); err != nil {
+			return nil, err
+		}
+		results = append(results, &r)
+	}
+	return results, nil
+}
+
+// Update status helper (Postgres)
+func UpdateAchievementStatus(refID uuid.UUID, status string, verifiedAt *time.Time, verifiedBy *uuid.UUID, note *string) error {
+	_, err := DB.Exec(`
+        UPDATE achievement_references
+        SET status = $1, verified_at = $2, verified_by = $3, rejection_note = $4, updated_at = NOW()
+        WHERE id = $5
+    `, status, verifiedAt, verifiedBy, note, refID)
+	return err
 }

@@ -10,65 +10,61 @@ import (
 
 func Setup(app *fiber.App) {
 
-	// Database
+	// --- Database ---
 	database.ConnectPostgres()
 	mongoClient := database.ConnectMongo()
 	repository.InitMongo(mongoClient)
 
-	// PUBLIC AUTH
+	// --- PUBLIC AUTH ---
 	auth := app.Group("/api/v1/auth")
 	auth.Post("/login", service.Login)
 	auth.Post("/refresh", service.Refresh)
 	auth.Post("/logout", service.Logout)
 
-	// PROTECTED (semua user)
+	// --- PROTECTED (JWT untuk semua user) ---
 	api := app.Group("/api/v1", middleware.JWT())
 	api.Get("/auth/profile", service.Profile)
 
-	// USERS (ADMIN)
-	users := api.Group("/users", middleware.Role("admin"))
-	users.Get("/", service.AdminGetUsers)
-	users.Get("/:id", service.AdminGetUserDetail)
-	users.Post("/", service.AdminCreateUser)
-	users.Put("/:id", service.AdminUpdateUser)
-	users.Delete("/:id", service.AdminDeleteUser)
-	users.Put("/:id/role", service.AdminUpdateUserRole)
+	// --- USERS (ADMIN ONLY) ---
+	users := api.Group("/users")
+	users.Get("/", middleware.Role("admin"), service.AdminGetUsers)
+	users.Get("/:id", middleware.Role("admin"), service.AdminGetUserDetail)
+	users.Post("/", middleware.Role("admin"), service.AdminCreateUser)
+	users.Put("/:id", middleware.Role("admin"), service.AdminUpdateUser)
+	users.Delete("/:id", middleware.Role("admin"), service.AdminDeleteUser)
+	users.Put("/:id/role", middleware.Role("admin"), service.AdminUpdateUserRole)
 
-	// ACHIEVEMENTS (SRS)
+	// --- ACHIEVEMENTS ---
 	achievements := api.Group("/achievements")
+
+	// --- SPESIFIK DULU (urutan penting) ---
+	achievements.Post("/:id/attachments", middleware.Role("admin"), service.UploadAchievementAttachments)
+	achievements.Post("/:id/verify", middleware.Role("dosen_wali"), service.VerifyAchievement)
+	achievements.Post("/:id/reject", middleware.Role("dosen_wali"), service.RejectAchievement)
+	achievements.Post("/:id/submit", middleware.Role("mahasiswa"), service.SubmitAchievement)
+	achievements.Put("/:id", middleware.Role("mahasiswa"), service.UpdateAchievement)
+	achievements.Delete("/:id", middleware.Role("mahasiswa"), service.DeleteAchievement)
+	achievements.Get("/:id/history", service.GetAchievementHistory)
+
+	// --- GENERAL ROUTES (setelah spesifik) ---
 	achievements.Get("/", service.GetAllAchievements)
 	achievements.Get("/:id", service.GetAchievementDetail)
-	achievements.Get("/:id/history", service.GetAchievementHistory)
-	achievements.Post("/:id/attachments", service.UploadAchievementAttachments)
+	achievements.Post("/", middleware.Role("mahasiswa"), service.CreateAchievement)
 
-	// mahasiswa only on same path
-	mhsAch := achievements.Group("/", middleware.Role("mahasiswa"))
-	mhsAch.Post("/", service.CreateAchievement)
-	mhsAch.Put("/:id", service.UpdateAchievement)
-	mhsAch.Delete("/:id", service.DeleteAchievement)
-	mhsAch.Post("/:id/submit", service.SubmitAchievement)
-
-	// dosen wali only
-	dosenAch := achievements.Group("/", middleware.Role("dosen_wali"))
-	dosenAch.Post("/:id/verify", service.VerifyAchievement)
-	dosenAch.Post("/:id/reject", service.RejectAchievement)
-	dosenAch.Get("/pending", service.GetPendingAchievements)
-
-	// STUDENTS
+	// --- STUDENTS ---
 	students := api.Group("/students")
 	students.Get("/", service.GetStudents)
 	students.Get("/:id", service.GetStudentDetail)
 	students.Get("/:id/achievements", service.GetStudentAchievements)
-	// assign advisor only admin
 	students.Put("/:id/advisor", middleware.Role("admin"), service.AssignAdvisor)
 
-	// LECTURERS
+	// --- LECTURERS ---
 	lecturers := api.Group("/lecturers")
 	lecturers.Get("/", service.GetLecturers)
-	lecturers.Get("/:id/advisees", service.GetLecturerAdvisees)
+	lecturers.Get("/:id/advisees", middleware.Role("dosen_wali", "admin"), service.GetLecturerAdvisees)
 
-	// REPORTS (admin)
-	reports := api.Group("/reports", middleware.Role("admin"))
-	reports.Get("/statistics", service.GetAchievementStatistics)
-	reports.Get("/student/:id", service.GetStudentReport)
+	// --- REPORTS / STATISTICS (ADMIN ONLY) ---
+	reports := api.Group("/reports")
+	reports.Get("/statistics", middleware.Role("admin"), service.GetAchievementStatistics)
+	reports.Get("/student/:id", middleware.Role("admin"), service.GetStudentReport)
 }
