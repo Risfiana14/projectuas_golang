@@ -165,13 +165,21 @@ func DeleteAchievementRef(id uuid.UUID) error {
 	return nil
 }
 
-// ADD HISTORY
-func AddAchievementHistory(mongoID string, action string, userID uuid.UUID) error {
-	_, err := DB.Exec(`
-		INSERT INTO achievement_history (id, mongo_achievement_id, action, user_id, timestamp)
-		VALUES ($1, $2, $3, $4, $5)
-	`, uuid.New(), mongoID, action, userID, time.Now())
-	return err
+// AddAchievementHistory inserts a history row (Postgres)
+func AddAchievementHistory(refID uuid.UUID, status string, note string, userID uuid.UUID) error {
+    var userPtr *uuid.UUID
+    if userID != uuid.Nil {
+        userPtr = &userID
+    } else {
+        userPtr = nil // supaya masuk NULL, tidak FK error
+    }
+
+    _, err := DB.Exec(`
+        INSERT INTO achievement_history (reference_id, status, note, user_id, timestamp)
+        VALUES ($1, $2, $3, $4, NOW())
+    `, refID, status, note, userPtr)
+
+    return err
 }
 
 // SAVE ATTACHMENT (dummy)
@@ -181,29 +189,28 @@ func SaveAttachment(mongoID string, filename string, data []byte) (string, error
 	return url, nil
 }
 
-// GET ACHIEVEMENT HISTORY (PG)
-func GetAchievementHistory(mongoID string) ([]model.AchievementHistory, error) {
-	rows, err := DB.Query(`
-        SELECT id, mongo_achievement_id, action, user_id, timestamp
+// GET ACHIEVEMENT HISTORY (query only)
+func GetAchievementHistory(refID uuid.UUID) ([]model.AchievementHistory, error) {
+    rows, err := DB.Query(`
+        SELECT id, reference_id, status, note, user_id, timestamp
         FROM achievement_history
-        WHERE mongo_achievement_id=$1
+        WHERE reference_id = $1
         ORDER BY timestamp ASC
-    `, mongoID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+    `, refID)
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
 
-	var history []model.AchievementHistory
-	for rows.Next() {
-		var h model.AchievementHistory
-		err := rows.Scan(&h.ID, &h.MongoID, &h.Action, &h.UserID, &h.Timestamp)
-		if err != nil {
-			return nil, err
-		}
-		history = append(history, h)
-	}
-	return history, nil
+    var list []model.AchievementHistory
+    for rows.Next() {
+        var h model.AchievementHistory
+        if err := rows.Scan(&h.ID, &h.ReferenceID, &h.Status, &h.Note, &h.UserID, &h.Timestamp); err != nil {
+            return nil, err
+        }
+        list = append(list, h)
+    }
+    return list, nil
 }
 
 // Get statistics (simple)
@@ -269,11 +276,32 @@ func GetAchievementsByStudents(studentIDs []uuid.UUID) ([]*model.AchievementRef,
 }
 
 // Update status helper (Postgres)
-func UpdateAchievementStatus(refID uuid.UUID, status string, verifiedAt *time.Time, verifiedBy *uuid.UUID, note *string) error {
-	_, err := DB.Exec(`
-        UPDATE achievement_references
-        SET status = $1, verified_at = $2, verified_by = $3, rejection_note = $4, updated_at = NOW()
-        WHERE id = $5
-    `, status, verifiedAt, verifiedBy, note, refID)
-	return err
+func UpdateAchievementStatus(
+    refID uuid.UUID,
+    status string,
+    t *time.Time,
+    actorID *uuid.UUID,
+    note *string,
+) error {
+
+    if status == "verified" {
+        _, err := DB.Exec(`
+            UPDATE achievement_references
+            SET status=$1, verified_at=$2, verified_by=$3, rejection_note=NULL, updated_at=NOW()
+            WHERE id=$4
+        `, status, t, actorID, refID)
+        return err
+    }
+
+    if status == "rejected" {
+        _, err := DB.Exec(`
+            UPDATE achievement_references
+            SET status=$1, rejection_note=$2, verified_at=NULL, verified_by=NULL, updated_at=NOW()
+            WHERE id=$3
+        `, status, note, refID)
+        return err
+    }
+
+    return errors.New("invalid status")
 }
+
