@@ -38,6 +38,7 @@ func Setup(app *fiber.App) {
 	achievements := api.Group("/achievements")
 
 	// --- SPESIFIK DULU (urutan penting) ---
+	achievements.Post("/:id/attachments", middleware.Role("mahasiswa"), service.UploadAchievementAttachments)
 	achievements.Post("/:id/attachments", middleware.Role("admin"), service.UploadAchievementAttachments)
 	achievements.Post("/:id/verify", middleware.Role("dosen_wali"), service.VerifyAchievement)
 	achievements.Post("/:id/reject", middleware.Role("dosen_wali"), service.RejectAchievement)

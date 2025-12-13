@@ -1,25 +1,26 @@
 package middleware
 
-import (
-	"github.com/gofiber/fiber/v2"
-)
+import "github.com/gofiber/fiber/v2"
 
-// Role accepts one or more allowed role names.
 func Role(allowedRoles ...string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		r := c.Locals("role")
-		role, _ := r.(string) // safe cast: if nil/other -> ""
-		// if no role in context → unauthenticated (but JWT middleware normally sets it)
-		if role == "" {
-			return c.Status(403).JSON(fiber.Map{"error": "Forbidden: missing role"})
+
+		roleI := c.Locals("role")
+		if roleI == nil {
+			return fiber.NewError(401, "Role not found")
 		}
 
-		for _, a := range allowedRoles {
-			if role == a {
-				// permitted
+		role, ok := roleI.(string)
+		if !ok {
+			return fiber.NewError(401, "Invalid role")
+		}
+
+		for _, allowed := range allowedRoles {
+			if role == allowed {
 				return c.Next()
 			}
 		}
-		return c.Status(403).JSON(fiber.Map{"error": "Forbidden: insufficient role"})
+
+		return fiber.NewError(403, "Forbidden: insufficient role")
 	}
 }

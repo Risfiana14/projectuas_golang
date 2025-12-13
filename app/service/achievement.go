@@ -15,7 +15,16 @@ import (
 
 // CREATE DRAFT
 func CreateAchievement(c *fiber.Ctx) error {
-	userID := c.Locals("user_id").(uuid.UUID)
+	uid := c.Locals("user_id")
+	if uid == nil {
+		return fiber.NewError(401, "Unauthorized")
+	}
+
+	userID, ok := uid.(uuid.UUID)
+	if !ok {
+		return fiber.NewError(401, "Invalid user id")
+	}
+
 	var ach model.Achievement
 	if err := c.BodyParser(&ach); err != nil {
 		return fiber.NewError(http.StatusBadRequest, "Invalid JSON")
@@ -92,8 +101,11 @@ func VerifyAchievement(c *fiber.Ctx) error {
 
     student, err := repository.GetStudentByUserID(ach.StudentID)
     if err != nil || student.AdvisorID == nil || *student.AdvisorID != lecturer.ID {
-        return fiber.NewError(403, "cannot verify: not your advisee")
-    }
+        return c.Status(403).JSON(fiber.Map{
+			"status":  "error",
+			"message": "cannot verify: not your advisee",
+		})
+	}
 
     now := time.Now()
 
@@ -148,8 +160,11 @@ func RejectAchievement(c *fiber.Ctx) error {
 
     student, err := repository.GetStudentByUserID(ach.StudentID)
     if err != nil || student.AdvisorID == nil || *student.AdvisorID != lecturer.ID {
-        return fiber.NewError(403, "cannot reject: not your advisee")
-    }
+        return c.Status(403).JSON(fiber.Map{
+			"status":  "error",
+			"message": "cannot verify: not your advisee",
+		})
+	}
 
     now := time.Now()
 
