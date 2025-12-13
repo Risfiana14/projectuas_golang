@@ -203,32 +203,59 @@ func GetMyAchievements(c *fiber.Ctx) error {
 }
 
 // GET ALL (filter by role)
+// GET ALL (filter by role)
 func GetAllAchievements(c *fiber.Ctx) error {
-	roleI := c.Locals("role")
-	role, _ := roleI.(string)
-	userID, _ := c.Locals("user_id").(uuid.UUID)
+	role := c.Locals("role").(string)
+	userID := c.Locals("user_id").(uuid.UUID)
 
 	switch role {
+
 	case "mahasiswa":
 		refs, err := repository.GetAchievementRefsByUser(userID)
 		if err != nil {
 			return fiber.NewError(http.StatusInternalServerError, "Gagal mengambil data")
 		}
 		return c.JSON(refs)
+
 	case "dosen_wali":
-		refs, err := repository.GetAchievementsByStatus("submitted")
+		// 1. Ambil lecturer
+		lecturer, err := repository.GetLecturerByUserID(userID)
 		if err != nil {
-			return fiber.NewError(http.StatusInternalServerError, "Gagal mengambil data")
+			return fiber.NewError(403, "lecturer record not found")
 		}
+
+		// 2. Ambil mahasiswa bimbingan
+		students, err := repository.GetAdviseesByLecturerID(lecturer.ID)
+		if err != nil {
+			return fiber.NewError(500, "failed to get advisees")
+		}
+
+		// 3. Ambil student user_id
+		var studentIDs []uuid.UUID
+		for _, s := range students {
+			studentIDs = append(studentIDs, s.UserID)
+		}
+
+		// 4. Ambil achievements
+		refs, err := repository.GetAchievementsByStudents(studentIDs)
+		if err != nil {
+			return fiber.NewError(500, "failed to get achievements")
+		}
+
 		return c.JSON(refs)
-	default: // admin
+
+	case "admin":
 		refs, err := repository.GetAllAchievementRefs()
 		if err != nil {
 			return fiber.NewError(http.StatusInternalServerError, "Gagal mengambil semua prestasi")
 		}
 		return c.JSON(refs)
+
+	default:
+		return fiber.NewError(403, "role not allowed")
 	}
 }
+
 
 // UPDATE (only draft)
 func UpdateAchievement(c *fiber.Ctx) error {
