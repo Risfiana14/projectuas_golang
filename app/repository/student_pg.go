@@ -37,6 +37,7 @@ func GetStudentByID(studentID uuid.UUID) (*model.Student, error) {
 	err := row.Scan(
 		&student.ID,
 		&student.UserID,
+        &student.StudentID,
 		&student.ProgramStudy,
 		&student.AcademicYear,
 		&student.AdvisorID,

@@ -49,7 +49,7 @@ func Setup(app *fiber.App) {
 	// --- GENERAL ROUTES (setelah spesifik) ---
 	achievements.Get("/", service.GetAllAchievements)
 	achievements.Get("/:id", service.GetAchievementDetail)
-	achievements.Post("/", middleware.Role("mahasiswa"), service.CreateAchievement)
+	achievements.Post("/", middleware.JWT(), middleware.Role("mahasiswa"), service.CreateAchievement)
 
 	// --- STUDENTS ---
 	students := api.Group("/students")

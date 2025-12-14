@@ -11,6 +11,8 @@ import (
 	"projectuas/app/model"
 )
 
+// NOTE: file ini mengasumsikan ada var DB *sql.DB dideklarasikan di paket repository (inisialisasi di database.ConnectPostgres()).
+
 // GET ACHIEVEMENT REFS BY STUDENT ID
 func GetAchievementRefsByStudentID(studentID uuid.UUID) ([]model.AchievementRef, error) {
 	rows, err := DB.Query(`
@@ -84,15 +86,21 @@ func GetAchievementRefByID(id uuid.UUID) (*model.AchievementRef, error) {
 
 // GET REF BY USER (alias GetAchievementRefsByUser)
 func GetAchievementRefsByUser(userID uuid.UUID) ([]*model.AchievementRef, error) {
-	refs, err := GetAchievementRefsByStudentID(userID)
-	if err != nil {
-		return nil, err
-	}
-	var ptrs []*model.AchievementRef
-	for i := range refs {
-		ptrs = append(ptrs, &refs[i])
-	}
-	return ptrs, nil
+    student, err := GetStudentByUserID(userID)
+    if err != nil {
+        return nil, err
+    }
+
+    refs, err := GetAchievementRefsByStudentID(student.ID)
+    if err != nil {
+        return nil, err
+    }
+
+    var ptrs []*model.AchievementRef
+    for i := range refs {
+        ptrs = append(ptrs, &refs[i])
+    }
+    return ptrs, nil
 }
 
 // GET ALL REFS
@@ -276,41 +284,6 @@ func GetAchievementsByStudents(studentIDs []uuid.UUID) ([]*model.AchievementRef,
 		results = append(results, &r)
 	}
 	return results, nil
-}
-// GET ACHIEVEMENT BY ID
-func GetAchievementByID(id string) (*model.AchievementRef, error) {
-    var ref model.AchievementRef
-
-    query := `
-        SELECT id, student_id, mongo_achievement_id, status,
-               submitted_at, verified_at, verified_by,
-               rejection_note, created_at, updated_at
-        FROM achievement_references
-        WHERE id = $1
-    `
-
-    err := DB.QueryRow(query, id).Scan(
-        &ref.ID,
-        &ref.StudentID,
-        &ref.MongoID,
-        &ref.Status,
-        &ref.SubmittedAt,
-        &ref.VerifiedAt,
-        &ref.VerifiedBy,
-        &ref.RejectionNote,
-        &ref.CreatedAt,
-        &ref.UpdatedAt,
-    )
-
-    if err == sql.ErrNoRows {
-        return nil, nil
-    }
-
-    if err != nil {
-        return nil, err
-    }
-
-    return &ref, nil
 }
 
 // Update status helper (Postgres)

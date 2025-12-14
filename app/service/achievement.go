@@ -16,6 +16,14 @@ import (
 func CreateAchievement(c *fiber.Ctx) error {
 	userID := c.Locals("user_id").(uuid.UUID)
 
+	role := c.Locals("role").(string)
+	if role != "mahasiswa" {
+		return c.Status(403).JSON(fiber.Map{
+			"status": "error",
+			"message": "Only mahasiswa can create achievements",
+		})
+	}
+
 	student, err := repository.GetStudentByUserID(userID)
 	if err != nil {
 		return fiber.NewError(403, "student record not found")
@@ -41,9 +49,15 @@ func CreateAchievement(c *fiber.Ctx) error {
 		return fiber.NewError(500, "failed save reference")
 	}
 
-	return c.JSON(fiber.Map{
-		"ref_id":   refID,
-		"mongo_id": mongoID,
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
+		"status": "success",
+		"message": "Achievement draft created successfully",
+		"data": fiber.Map{
+			"reference_id": refID,
+			"mongo_id":     mongoID,
+			"status":       "draft",
+			"created_at":   ach.CreatedAt,
+		},
 	})
 }
 
@@ -92,12 +106,28 @@ func VerifyAchievement(c *fiber.Ctx) error {
         })
     }
 
-    if achievement.Status != "submitted" {
-        return c.Status(400).JSON(fiber.Map{
-            "status": "error",
-            "message": "Only submitted achievements can be verified",
-        })
-    }
+    // GUARD FINAL STATE (SRS)
+	if achievement.Status == "verified" {
+		return c.Status(409).JSON(fiber.Map{
+			"status": "error",
+			"message": "Achievement already verified and cannot be changed",
+		})
+	}
+
+	if achievement.Status == "rejected" {
+		return c.Status(409).JSON(fiber.Map{
+			"status": "error",
+			"message": "Rejected achievement cannot be verified",
+		})
+	}
+
+	// Only submitted allowed
+	if achievement.Status != "submitted" {
+		return c.Status(400).JSON(fiber.Map{
+			"status": "error",
+			"message": "Only submitted achievements can be verified",
+		})
+	}
 
     student, err := repository.GetStudentByID(achievement.StudentID)
     if err != nil || student == nil {
@@ -168,12 +198,28 @@ func RejectAchievement(c *fiber.Ctx) error {
         })
     }
 
-    if achievement.Status != "submitted" {
-        return c.Status(400).JSON(fiber.Map{
-            "status": "error",
-            "message": "Only submitted achievements can be rejected",
-        })
-    }
+    // GUARD FINAL STATE (SRS)
+	if achievement.Status == "verified" {
+		return c.Status(409).JSON(fiber.Map{
+			"status": "error",
+			"message": "Verified achievement cannot be rejected",
+		})
+	}
+
+	if achievement.Status == "rejected" {
+		return c.Status(409).JSON(fiber.Map{
+			"status": "error",
+			"message": "Achievement already rejected",
+		})
+	}
+
+	// Only submitted allowed
+	if achievement.Status != "submitted" {
+		return c.Status(400).JSON(fiber.Map{
+			"status": "error",
+			"message": "Only submitted achievements can be rejected",
+		})
+	}
 
     student, err := repository.GetStudentByID(achievement.StudentID)
     if err != nil || student == nil {
