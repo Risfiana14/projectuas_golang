@@ -25,6 +25,30 @@ func GetStudents() ([]model.Student, error) {
     return list, nil
 }
 
+// GET STUDENT BY ID
+func GetStudentByID(studentID uuid.UUID) (*model.Student, error) {
+	row := DB.QueryRow(`
+		SELECT id, user_id, student_id, program_study, academic_year, advisor_id
+		FROM students
+		WHERE id = $1
+	`, studentID)
+
+	var student model.Student
+	err := row.Scan(
+		&student.ID,
+		&student.UserID,
+		&student.ProgramStudy,
+		&student.AcademicYear,
+		&student.AdvisorID,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &student, nil
+}
+// GET STUDENT BY USER ID
 func GetStudentByUserID(userID uuid.UUID) (*model.Student, error) {
     var s model.Student
     err := DB.QueryRow(`

@@ -11,8 +11,6 @@ import (
 	"projectuas/app/model"
 )
 
-// NOTE: file ini mengasumsikan ada var DB *sql.DB dideklarasikan di paket repository (inisialisasi di database.ConnectPostgres()).
-
 // GET ACHIEVEMENT REFS BY STUDENT ID
 func GetAchievementRefsByStudentID(studentID uuid.UUID) ([]model.AchievementRef, error) {
 	rows, err := DB.Query(`
@@ -152,17 +150,22 @@ func GetAchievementsByStatus(status string) ([]*model.AchievementRef, error) {
 	return list, nil
 }
 
-// DELETE REFERENCE
+// DELETE REFERENCE (Postgres, database/sql)
 func DeleteAchievementRef(id uuid.UUID) error {
-	res, err := DB.Exec(`DELETE FROM achievement_references WHERE id=$1`, id)
-	if err != nil {
-		return err
-	}
-	rowsAffected, _ := res.RowsAffected()
-	if rowsAffected == 0 {
-		return errors.New("reference not found")
-	}
-	return nil
+	_, err := DB.Exec(`
+		DELETE FROM achievement_references
+		WHERE id = $1
+	`, id)
+	return err
+}
+
+// DELETE ACHIEVEMENT HISTORY BY REF ID
+func DeleteAchievementHistoryByRefID(refID uuid.UUID) error {
+	_, err := DB.Exec(`
+		DELETE FROM achievement_history
+		WHERE reference_id = $1
+	`, refID)
+	return err
 }
 
 // AddAchievementHistory inserts a history row (Postgres)
@@ -274,6 +277,41 @@ func GetAchievementsByStudents(studentIDs []uuid.UUID) ([]*model.AchievementRef,
 	}
 	return results, nil
 }
+// GET ACHIEVEMENT BY ID
+func GetAchievementByID(id string) (*model.AchievementRef, error) {
+    var ref model.AchievementRef
+
+    query := `
+        SELECT id, student_id, mongo_achievement_id, status,
+               submitted_at, verified_at, verified_by,
+               rejection_note, created_at, updated_at
+        FROM achievement_references
+        WHERE id = $1
+    `
+
+    err := DB.QueryRow(query, id).Scan(
+        &ref.ID,
+        &ref.StudentID,
+        &ref.MongoID,
+        &ref.Status,
+        &ref.SubmittedAt,
+        &ref.VerifiedAt,
+        &ref.VerifiedBy,
+        &ref.RejectionNote,
+        &ref.CreatedAt,
+        &ref.UpdatedAt,
+    )
+
+    if err == sql.ErrNoRows {
+        return nil, nil
+    }
+
+    if err != nil {
+        return nil, err
+    }
+
+    return &ref, nil
+}
 
 // Update status helper (Postgres)
 func UpdateAchievementStatus(
@@ -303,5 +341,19 @@ func UpdateAchievementStatus(
     }
 
     return errors.New("invalid status")
+}
+
+// RejectAchievement marks an achievement as rejected
+func RejectAchievement(achievementID uuid.UUID, verifiedBy uuid.UUID) error {
+    query := `
+        UPDATE achievement_references
+        SET status = 'rejected',
+            verified_by = $2,
+            verified_at = NOW(),
+            updated_at = NOW()
+        WHERE id = $1
+    `
+    _, err := DB.Exec(query, achievementID, verifiedBy)
+    return err
 }
 

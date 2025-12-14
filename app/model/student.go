@@ -13,5 +13,4 @@ type Student struct {
     AcademicYear string    `db:"academic_year" json:"academic_year"`
     AdvisorID    *uuid.UUID `db:"advisor_id" json:"advisor_id"`
     CreatedAt    time.Time `db:"created_at" json:"created_at"`
-    UpdatedAt    time.Time `db:"updated_at" json:"updated_at"`
 }

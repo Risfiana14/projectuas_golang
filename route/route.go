@@ -43,7 +43,7 @@ func Setup(app *fiber.App) {
 	achievements.Post("/:id/reject", middleware.Role("dosen_wali"), service.RejectAchievement)
 	achievements.Post("/:id/submit", middleware.Role("mahasiswa"), service.SubmitAchievement)
 	achievements.Put("/:id", middleware.Role("mahasiswa"), service.UpdateAchievement)
-	achievements.Delete("/:id", middleware.Role("mahasiswa"), service.DeleteAchievement)
+	achievements.Delete("/:id", middleware.Role("admin", "mahasiswa"), service.DeleteAchievement)
 	achievements.Get("/:id/history", service.GetAchievementHistory)
 
 	// --- GENERAL ROUTES (setelah spesifik) ---
