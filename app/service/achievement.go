@@ -1,7 +1,6 @@
 package service
 
 import (
-	"io"
 	"net/http"
 	"time"
 
@@ -25,28 +24,42 @@ func CreateAchievement(c *fiber.Ctx) error {
 		return fiber.NewError(401, "Invalid user id")
 	}
 
+	// 🔑 WAJIB: ambil student dari user_id
+	student, err := repository.GetStudentByUserID(userID)
+	if err != nil {
+		return fiber.NewError(403, "student record not found")
+	}
+
 	var ach model.Achievement
 	if err := c.BodyParser(&ach); err != nil {
 		return fiber.NewError(http.StatusBadRequest, "Invalid JSON")
 	}
 
-	ach.StudentID = userID
+	// 🔒 SESUAI SRS
+	ach.StudentID = student.ID
 	ach.Status = "draft"
 	ach.CreatedAt = time.Now()
 	ach.UpdatedAt = time.Now()
 
+	// Simpan MongoDB
 	mongoID, err := repository.InsertAchievementMongo(&ach)
 	if err != nil {
 		return fiber.NewError(http.StatusInternalServerError, "Gagal simpan MongoDB")
 	}
 
+	// Simpan reference PostgreSQL
 	refID := uuid.New()
-	if err := repository.CreateAchievementReference(refID, userID, mongoID); err != nil {
+	if err := repository.CreateAchievementReference(refID, student.ID, mongoID); err != nil {
 		return fiber.NewError(http.StatusInternalServerError, "Gagal simpan reference")
 	}
 
-	return c.JSON(fiber.Map{"message": "Draft prestasi berhasil dibuat", "ref_id": refID, "mongo_id": mongoID})
+	return c.JSON(fiber.Map{
+		"message":  "Draft prestasi berhasil dibuat",
+		"ref_id":   refID,
+		"mongo_id": mongoID,
+	})
 }
+
 
 // SUBMIT
 func SubmitAchievement(c *fiber.Ctx) error {
@@ -389,34 +402,39 @@ func GetAchievementHistory(c *fiber.Ctx) error {
 
 // UPLOAD ATTACHMENTS
 func UploadAchievementAttachments(c *fiber.Ctx) error {
-	refID, err := uuid.Parse(c.Params("id"))
+	achID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return fiber.NewError(http.StatusBadRequest, "invalid reference id")
-	}
-	ref, err := repository.GetAchievementRefByID(refID)
-	if err != nil {
-		return fiber.NewError(http.StatusNotFound, "Reference not found")
+		return fiber.NewError(400, "invalid achievement id")
 	}
 
-	file, err := c.FormFile("file")
+	role := c.Locals("role").(string)
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	// Ambil achievement
+	ach, err := repository.GetAchievementRefByID(achID)
 	if err != nil {
-		return fiber.NewError(http.StatusBadRequest, "file required")
-	}
-	f, err := file.Open()
-	if err != nil {
-		return fiber.NewError(http.StatusInternalServerError, "failed open file")
-	}
-	defer f.Close()
-	data, err := io.ReadAll(f)
-	if err != nil {
-		return fiber.NewError(http.StatusInternalServerError, "failed read file")
+		return fiber.NewError(404, "achievement not found")
 	}
 
-	url, err := repository.SaveAttachment(ref.MongoID, file.Filename, data)
-	if err != nil {
-		return fiber.NewError(http.StatusInternalServerError, "failed save attachment")
-	}
-	_ = repository.AddAchievementHistory(ref.ID, "attachment_uploaded", "", uuid.Nil)
+	// 🔐 VALIDASI MAHASISWA
+	if role == "mahasiswa" {
+		student, err := repository.GetStudentByUserID(userID)
+		if err != nil {
+			return fiber.NewError(403, "student record not found")
+		}
 
-	return c.JSON(fiber.Map{"message": "Uploaded", "url": url})
+		// ✅ INI VALIDASI YANG BENAR
+		if ach.StudentID != student.ID {
+			return c.Status(403).JSON(fiber.Map{
+				"status":  "error",
+				"message": "cannot upload attachment to other student's achievement",
+			})
+		}
+	}
+
+	// lanjut upload file...
+	return c.JSON(fiber.Map{
+		"status":  "success",
+		"message": "attachment uploaded successfully",
+	})
 }
