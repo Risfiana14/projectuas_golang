@@ -47,7 +47,7 @@ func Setup(app *fiber.App) {
 	achievements.Get("/:id/history", service.GetAchievementHistory)
 
 	// --- GENERAL ROUTES (setelah spesifik) ---
-	achievements.Get("/", service.GetAllAchievements)
+	achievements.Get("/", middleware.Role("admin", "dosen_wali"), service.GetAllAchievements)
 	achievements.Get("/:id", service.GetAchievementDetail)
 	achievements.Post("/", middleware.JWT(), middleware.Role("mahasiswa"), service.CreateAchievement)
 

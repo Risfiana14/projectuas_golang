@@ -67,6 +67,36 @@ func GetStudentByUserID(userID uuid.UUID) (*model.Student, error) {
     return &s, nil
 }
 
+// GET STUDENTS BY ADVISOR
+func GetStudentsByAdvisor(advisorUserID uuid.UUID) ([]model.Student, error) {
+	rows, err := DB.Query(`
+		SELECT s.id, s.user_id, s.student_id, s.program_study,
+		       s.academic_year, s.advisor_id, s.created_at
+		FROM students s
+		JOIN lecturers l ON s.advisor_id = l.id
+		WHERE l.user_id = $1
+	`, advisorUserID)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []model.Student
+	for rows.Next() {
+		var s model.Student
+		if err := rows.Scan(
+			&s.ID, &s.UserID, &s.StudentID,
+			&s.ProgramStudy, &s.AcademicYear,
+			&s.AdvisorID, &s.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		list = append(list, s)
+	}
+	return list, nil
+}
+
 // ASSIGN ADVISOR TO STUDENT
 func AssignAdvisorToStudent(studentID uuid.UUID, advisorID uuid.UUID) error {
     var exists bool

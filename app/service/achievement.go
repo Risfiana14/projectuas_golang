@@ -295,52 +295,60 @@ func GetAllAchievements(c *fiber.Ctx) error {
 	role := c.Locals("role").(string)
 	userID := c.Locals("user_id").(uuid.UUID)
 
+	var (
+		refs []*model.AchievementRef
+		err  error
+	)
+
 	switch role {
 
-	case "mahasiswa":
-		refs, err := repository.GetAchievementRefsByUser(userID)
-		if err != nil {
-			return fiber.NewError(http.StatusInternalServerError, "Gagal mengambil data")
-		}
-		return c.JSON(refs)
+	case "admin":
+		refs, err = repository.GetAllAchievementRefs()
 
 	case "dosen_wali":
-		// 1. Ambil lecturer
-		lecturer, err := repository.GetLecturerByUserID(userID)
+		// 1. Ambil mahasiswa bimbingan dosen
+		students, err := repository.GetStudentsByAdvisor(userID)
 		if err != nil {
-			return fiber.NewError(403, "lecturer record not found")
+			return c.Status(500).JSON(fiber.Map{
+				"status": "error",
+				"message": "failed to get advisees",
+			})
 		}
 
-		// 2. Ambil mahasiswa bimbingan
-		students, err := repository.GetAdviseesByLecturerID(lecturer.ID)
-		if err != nil {
-			return fiber.NewError(500, "failed to get advisees")
-		}
-
-		// 3. Ambil student user_id
 		var studentIDs []uuid.UUID
 		for _, s := range students {
-			studentIDs = append(studentIDs, s.UserID)
+			studentIDs = append(studentIDs, s.ID)
 		}
 
-		// 4. Ambil achievements
-		refs, err := repository.GetAchievementsByStudents(studentIDs)
-		if err != nil {
-			return fiber.NewError(500, "failed to get achievements")
-		}
-
-		return c.JSON(refs)
-
-	case "admin":
-		refs, err := repository.GetAllAchievementRefs()
-		if err != nil {
-			return fiber.NewError(http.StatusInternalServerError, "Gagal mengambil semua prestasi")
-		}
-		return c.JSON(refs)
+		// 2. Ambil achievement mereka
+		refs, err = repository.GetAchievementsByStudents(studentIDs)
 
 	default:
-		return fiber.NewError(403, "role not allowed")
+		return c.Status(403).JSON(fiber.Map{
+			"status": "error",
+			"message": "forbidden",
+		})
 	}
+
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"status": "error",
+			"message": "failed to get achievements",
+		})
+	}
+
+	if len(refs) == 0 {
+		return c.JSON(fiber.Map{
+			"status":  "success",
+			"message": "No achievements available",
+			"data":    []interface{}{},
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"status": "success",
+		"data":   refs,
+	})
 }
 
 
