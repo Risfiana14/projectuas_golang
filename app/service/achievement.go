@@ -81,6 +81,16 @@ func SubmitAchievement(c *fiber.Ctx) error {
 	if err := repository.UpdateAchievementRef(ref); err != nil {
 		return fiber.NewError(500, "failed update status")
 	}
+	// 🔴 UPDATE STATUS DI MONGODB
+	if err := repository.UpdateAchievementMongo(
+		ref.MongoID,
+		bson.M{
+			"status":     "submitted",
+			"updated_at": time.Now(),
+		},
+	); err != nil {
+		return fiber.NewError(500, "failed sync mongo status")
+	}
 
 	_ = repository.AddAchievementHistory(ref.ID, "submitted", "", ref.StudentID)
 	return c.JSON(fiber.Map{"message": "submitted"})
@@ -88,40 +98,24 @@ func SubmitAchievement(c *fiber.Ctx) error {
 
 // FR-007: Verify Achievement
 func VerifyAchievement(c *fiber.Ctx) error {
-    achID, err := uuid.Parse(c.Params("id"))
-    if err != nil {
-        return c.Status(400).JSON(fiber.Map{
-            "status": "error",
-            "message": "Invalid achievement id",
-        })
-    }
-
-    userID := c.Locals("user_id").(uuid.UUID)
-
-    achievement, err := repository.GetAchievementRefByID(achID)
-    if err != nil || achievement == nil {
-        return c.Status(404).JSON(fiber.Map{
-            "status": "error",
-            "message": "Achievement not found",
-        })
-    }
-
-    // GUARD FINAL STATE (SRS)
-	if achievement.Status == "verified" {
-		return c.Status(409).JSON(fiber.Map{
+	achID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
 			"status": "error",
-			"message": "Achievement already verified and cannot be changed",
+			"message": "Invalid achievement id",
 		})
 	}
 
-	if achievement.Status == "rejected" {
-		return c.Status(409).JSON(fiber.Map{
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	achievement, err := repository.GetAchievementRefByID(achID)
+	if err != nil || achievement == nil {
+		return c.Status(404).JSON(fiber.Map{
 			"status": "error",
-			"message": "Rejected achievement cannot be verified",
+			"message": "Achievement not found",
 		})
 	}
 
-	// Only submitted allowed
 	if achievement.Status != "submitted" {
 		return c.Status(400).JSON(fiber.Map{
 			"status": "error",
@@ -129,41 +123,62 @@ func VerifyAchievement(c *fiber.Ctx) error {
 		})
 	}
 
-    student, err := repository.GetStudentByID(achievement.StudentID)
-    if err != nil || student == nil {
-        return c.Status(404).JSON(fiber.Map{
-            "status": "error",
-            "message": "Student not found",
-        })
-    }
+	student, err := repository.GetStudentByID(achievement.StudentID)
+	if err != nil || student == nil {
+		return c.Status(404).JSON(fiber.Map{
+			"status": "error",
+			"message": "Student not found",
+		})
+	}
 
-    if student.AdvisorID == nil || *student.AdvisorID != userID {
-        return c.Status(403).JSON(fiber.Map{
-            "status": "error",
-            "message": "You are not the advisor of this student",
-        })
-    }
+	// 🔧 FIX UTAMA DI SINI
+	lecturer, err := repository.GetLecturerByUserID(userID)
+	if err != nil || lecturer == nil {
+		return c.Status(403).JSON(fiber.Map{
+			"status": "error",
+			"message": "Lecturer not found",
+		})
+	}
 
-    now := time.Now()
+	if student.AdvisorID == nil || *student.AdvisorID != lecturer.ID {
+		return c.Status(403).JSON(fiber.Map{
+			"status": "error",
+			"message": "You are not the advisor of this student",
+		})
+	}
 
-    err = repository.UpdateAchievementStatus(
-        achID,
-        "verified",
-        &now,
-        &userID,
-        nil,
-    )
-    if err != nil {
-        return c.Status(500).JSON(fiber.Map{
-            "status": "error",
-            "message": "Failed to verify achievement",
-        })
-    }
+	now := time.Now()
+	if err := repository.UpdateAchievementStatus(
+	achID,
+	"verified",
+	&now,
+	&userID,
+	nil,
+); err != nil {
+	return c.Status(500).JSON(fiber.Map{
+		"status": "error",
+		"message": "Failed to verify achievement",
+	})
+}
 
-    return c.JSON(fiber.Map{
-        "status": "success",
-        "message": "Achievement verified successfully",
-    })
+	// 🔴 UPDATE STATUS DI MONGODB
+	if err := repository.UpdateAchievementMongo(
+		achievement.MongoID,
+		bson.M{
+			"status":     "verified",
+			"updated_at": time.Now(),
+		},
+	); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"status": "error",
+			"message": "Failed to sync achievement status to MongoDB",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"status": "success",
+		"message": "Achievement verified successfully",
+	})
 }
 
 // FR-008: Reject Achievement
@@ -238,19 +253,32 @@ func RejectAchievement(c *fiber.Ctx) error {
 
     now := time.Now()
 
-    err = repository.UpdateAchievementStatus(
-        achID,
-        "rejected",
-        &now,
-        &userID,
-        &body.Note,
-    )
-    if err != nil {
-        return c.Status(500).JSON(fiber.Map{
-            "status": "error",
-            "message": "Failed to reject achievement",
-        })
-    }
+    if err := repository.UpdateAchievementStatus(
+		achID,
+		"rejected",
+		&now,
+		&userID,
+		&body.Note,
+	); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"status": "error",
+			"message": "Failed to reject achievement",
+		})
+	}
+
+	// 🔴 UPDATE STATUS DI MONGODB
+	if err := repository.UpdateAchievementMongo(
+		achievement.MongoID,
+		bson.M{
+			"status":     "rejected",
+			"updated_at": time.Now(),
+		},
+	); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"status": "error",
+			"message": "Failed to sync achievement status to MongoDB",
+		})
+	}
 
     return c.JSON(fiber.Map{
         "status": "success",

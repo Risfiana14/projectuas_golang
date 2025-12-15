@@ -54,15 +54,17 @@ func GetAdviseesByLecturerID(lecturerID uuid.UUID) ([]model.Student, error) {
 
 // GetLecturerByUserID finds lecturer row by users.id (user_id)
 func GetLecturerByUserID(userID uuid.UUID) (*model.Lecturer, error) {
-	var l model.Lecturer
-	err := DB.QueryRow(`
-        SELECT id, user_id, lecturer_id, department, created_at
-        FROM lecturers
-        WHERE user_id = $1
-    `, userID).Scan(&l.ID, &l.UserID, &l.LecturerID, &l.Department, &l.CreatedAt)
+	row := DB.QueryRow(`
+		SELECT id, user_id, lecturer_id, department, created_at
+		FROM lecturers
+		WHERE user_id = $1
+	`, userID)
 
+	var l model.Lecturer
+	err := row.Scan(&l.ID, &l.UserID, &l.LecturerID, &l.Department, &l.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
 	return &l, nil
 }
+
