@@ -458,17 +458,27 @@ func DeleteAchievement(c *fiber.Ctx) error {
 	if role != "admin" && role != "mahasiswa" {
 		return fiber.NewError(403, "forbidden")
 	}
+// 1️⃣ SOFT DELETE DI MONGODB
+	if err := repository.SoftDeleteAchievementMongo(ref.MongoID); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"status": "error",
+			"message": "failed to soft delete achievement in MongoDB",
+		})
+	}
 
-	_ = repository.DeleteAchievementMongo(ref.MongoID)
-	_ = repository.DeleteAchievementHistoryByRefID(ref.ID)
-	_ = repository.DeleteAchievementRef(ref.ID)
+// 2️⃣ UPDATE REFERENCE DI POSTGRESQL
+	if err := repository.SoftDeleteAchievementRef(ref.ID); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"status": "error",
+			"message": "failed to update achievement reference",
+		})
+	}
 
 	return c.JSON(fiber.Map{
 		"status":  "success",
-		"message": "achievement deleted successfully",
+		"message": "Achievement deleted successfully",
 	})
 }
-
 
 // GET ACHIEVEMENT HISTORY (PG)
 func GetAchievementHistory(c *fiber.Ctx) error {

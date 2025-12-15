@@ -3,6 +3,7 @@ package repository
 import (
     "context"
     "os"
+    "time"
 
     "go.mongodb.org/mongo-driver/bson"
     "go.mongodb.org/mongo-driver/bson/primitive"
@@ -61,12 +62,24 @@ func UpdateAchievementMongo(id string, update bson.M) error {
     return err
 }
 
-// DELETE (HARD DELETE)
-func DeleteAchievementMongo(id string) error {
-    oid, err := primitive.ObjectIDFromHex(id)
-    if err != nil {
-        return err
-    }
-    _, err = achievementsColl().DeleteOne(context.TODO(), bson.M{"_id": oid})
-    return err
+// FR-005
+// SOFT DELETE ACHIEVEMENT (MongoDB)
+func SoftDeleteAchievementMongo(id string) error {
+	oid, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return err
+	}
+
+	_, err = achievementsColl().UpdateOne(
+		context.TODO(),
+		bson.M{"_id": oid},
+		bson.M{
+			"$set": bson.M{
+				"status":     "deleted",
+				"deleted_at": time.Now(),
+				"updated_at": time.Now(),
+			},
+		},
+	)
+	return err
 }

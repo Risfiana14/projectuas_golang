@@ -159,14 +159,18 @@ func GetAchievementsByStatus(status string) ([]*model.AchievementRef, error) {
 	return list, nil
 }
 
-// DELETE REFERENCE (Postgres, database/sql)
-func DeleteAchievementRef(id uuid.UUID) error {
+// SOFT DELETE ACHIEVEMENT REF (PostgreSQL)
+func SoftDeleteAchievementRef(refID uuid.UUID) error {
 	_, err := DB.Exec(`
-		DELETE FROM achievement_references
+		UPDATE achievement_references
+		SET status = 'deleted',
+		    updated_at = NOW()
 		WHERE id = $1
-	`, id)
+	`, refID)
+
 	return err
 }
+
 
 // DELETE ACHIEVEMENT HISTORY BY REF ID
 func DeleteAchievementHistoryByRefID(refID uuid.UUID) error {
