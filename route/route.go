@@ -53,10 +53,10 @@ func Setup(app *fiber.App) {
 
 	// --- STUDENTS ---
 	students := api.Group("/students")
-	students.Get("/", service.GetStudents)
-	students.Get("/:id", service.GetStudentDetail)
-	students.Get("/:id/achievements", service.GetStudentAchievements)
-	students.Put("/:id/advisor", middleware.Role("admin"), service.AssignAdvisor)
+	students.Get("/", middleware.Role("admin"), service.GetStudents)				// ✅ ADMIN ONLY
+	students.Get("/:id", service.GetStudentDetail) 									// ✅ ADMIN / SELF / ADVISEE
+	students.Get("/:id/achievements", service.GetStudentAchievements) 				// ✅ ADMIN / SELF / ADVISEE
+	students.Put("/:id/advisor", middleware.Role("admin"), service.AssignAdvisor)	// ✅ ADMIN ONLY
 
 	// --- LECTURERS ---
 	lecturers := api.Group("/lecturers")

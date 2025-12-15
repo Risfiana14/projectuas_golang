@@ -20,13 +20,33 @@ func GetAchievementStatistics(c *fiber.Ctx) error {
 
 // GET STUDENT REPORT
 func GetStudentReport(c *fiber.Ctx) error {
-	id, err := uuid.Parse(c.Params("id"))
+	studentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return fiber.NewError(http.StatusBadRequest, "invalid id")
+		return c.Status(400).JSON(fiber.Map{
+			"status": "error",
+			"message": "invalid student id",
+		})
 	}
-	report, err := repository.GetStudentReport(id)
+
+	refs, err := repository.GetStudentReport(studentID)
 	if err != nil {
-		return fiber.NewError(http.StatusInternalServerError, "failed get report")
+		return c.Status(500).JSON(fiber.Map{
+			"status": "error",
+			"message": "failed to get student report",
+		})
 	}
-	return c.JSON(report)
+
+	if len(refs) == 0 {
+		return c.JSON(fiber.Map{
+			"status":  "success",
+			"message": "No achievements available for this student",
+			"data":    []interface{}{},
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"status": "success",
+		"data":   refs,
+	})
 }
+

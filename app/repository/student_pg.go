@@ -3,7 +3,7 @@ package repository
 import (
     "projectuas/app/model"
     "github.com/google/uuid"
-    "time"
+    "errors"
 )
 
 // GetStudents
@@ -67,9 +67,38 @@ func GetStudentByUserID(userID uuid.UUID) (*model.Student, error) {
     return &s, nil
 }
 
-
+// ASSIGN ADVISOR TO STUDENT
 func AssignAdvisorToStudent(studentID uuid.UUID, advisorID uuid.UUID) error {
-    _, err := DB.Exec(`UPDATE students SET advisor_id=$1, updated_at=$2 WHERE id=$3`,
-        advisorID, time.Now(), studentID)
-    return err
+    var exists bool
+
+    err := DB.QueryRow(`
+        SELECT EXISTS (
+            SELECT 1 FROM lecturers WHERE id = $1
+        )
+    `, advisorID).Scan(&exists)
+
+    if err != nil {
+        return err
+    }
+
+    if !exists {
+        return errors.New("advisor not found")
+    }
+
+    res, err := DB.Exec(`
+        UPDATE students
+        SET advisor_id = $1
+        WHERE id = $2
+    `, advisorID, studentID)
+
+    if err != nil {
+        return err
+    }
+
+    rows, _ := res.RowsAffected()
+    if rows == 0 {
+        return errors.New("student not found")
+    }
+
+    return nil
 }

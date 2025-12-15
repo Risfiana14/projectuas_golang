@@ -20,6 +20,7 @@ func GetAchievementRefsByStudentID(studentID uuid.UUID) ([]model.AchievementRef,
                verified_by, rejection_note, created_at, updated_at
         FROM achievement_references
         WHERE student_id=$1
+		AND status IN ('submitted', 'verified', 'rejected')
         ORDER BY created_at DESC
     `, studentID)
 	if err != nil {
@@ -27,17 +28,17 @@ func GetAchievementRefsByStudentID(studentID uuid.UUID) ([]model.AchievementRef,
 	}
 	defer rows.Close()
 
-	var list []model.AchievementRef
+	list := []model.AchievementRef{}
 	for rows.Next() {
-		var ref model.AchievementRef
-		err := rows.Scan(&ref.ID, &ref.StudentID, &ref.MongoID, &ref.Status,
-			&ref.SubmittedAt, &ref.VerifiedAt, &ref.VerifiedBy,
-			&ref.RejectionNote, &ref.CreatedAt, &ref.UpdatedAt)
-		if err != nil {
-			return nil, err
+			var ref model.AchievementRef
+			err := rows.Scan(&ref.ID, &ref.StudentID, &ref.MongoID, &ref.Status,
+				&ref.SubmittedAt, &ref.VerifiedAt, &ref.VerifiedBy,
+				&ref.RejectionNote, &ref.CreatedAt, &ref.UpdatedAt)
+			if err != nil {
+				return nil, err
+			}
+			list = append(list, ref)
 		}
-		list = append(list, ref)
-	}
 	return list, nil
 }
 
