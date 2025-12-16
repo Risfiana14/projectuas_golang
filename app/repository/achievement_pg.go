@@ -182,20 +182,19 @@ func DeleteAchievementHistoryByRefID(refID uuid.UUID) error {
 }
 
 // AddAchievementHistory inserts a history row (Postgres)
-func AddAchievementHistory(refID uuid.UUID, status string, note string, userID uuid.UUID) error {
-    var userPtr *uuid.UUID
-    if userID != uuid.Nil {
-        userPtr = &userID
-    } else {
-        userPtr = nil // supaya masuk NULL, tidak FK error
-    }
+func AddAchievementHistory(
+	refID uuid.UUID,
+	status string,
+	note *string,
+	userID uuid.UUID,
+) error {
+	_, err := DB.Exec(`
+		INSERT INTO achievement_history
+		(reference_id, status, note, user_id, timestamp)
+		VALUES ($1, $2, $3, $4, NOW())
+	`, refID, status, note, userID)
 
-    _, err := DB.Exec(`
-        INSERT INTO achievement_history (reference_id, status, note, user_id, timestamp)
-        VALUES ($1, $2, $3, $4, NOW())
-    `, refID, status, note, userPtr)
-
-    return err
+	return err
 }
 
 // SAVE ATTACHMENT (dummy)
@@ -206,7 +205,7 @@ func SaveAttachment(mongoID string, filename string, data []byte) (string, error
 }
 
 // GET ACHIEVEMENT HISTORY (query only)
-func GetAchievementHistory(refID uuid.UUID) ([]model.AchievementHistory, error) {
+func GetAchievementHistoryByRefID(refID uuid.UUID) ([]model.AchievementHistory, error) {
     rows, err := DB.Query(`
         SELECT id, reference_id, status, note, user_id, timestamp
         FROM achievement_history

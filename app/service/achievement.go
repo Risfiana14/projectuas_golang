@@ -46,6 +46,15 @@ func CreateAchievement(c *fiber.Ctx) error {
 
 	refID := uuid.New()
 	if err := repository.CreateAchievementReference(refID, student.ID, mongoID); err != nil {
+		// ✅ INSERT HISTORY DRAFT (SRS)
+	note := "Achievement created as draft"
+	_ = repository.AddAchievementHistory(
+		refID,
+		"draft",
+		&note,
+		userID,
+	)
+
 		return fiber.NewError(500, "failed save reference")
 	}
 
@@ -92,7 +101,16 @@ func SubmitAchievement(c *fiber.Ctx) error {
 		return fiber.NewError(500, "failed sync mongo status")
 	}
 
-	_ = repository.AddAchievementHistory(ref.ID, "submitted", "", ref.StudentID)
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	note := "Achievement submitted by student"
+	_ = repository.AddAchievementHistory(
+		ref.ID,
+		"submitted",
+		&note,    // ⬅️ pakai pointer ke string
+		userID,
+	)
+
 	return c.JSON(fiber.Map{"message": "submitted"})
 }
 
@@ -148,18 +166,34 @@ func VerifyAchievement(c *fiber.Ctx) error {
 	}
 
 	now := time.Now()
+
+	// UPDATE POSTGRES
 	if err := repository.UpdateAchievementStatus(
-	achID,
-	"verified",
-	&now,
-	&userID,
-	nil,
-); err != nil {
-	return c.Status(500).JSON(fiber.Map{
-		"status": "error",
-		"message": "Failed to verify achievement",
-	})
-}
+		achievement.ID,
+		"verified",
+		&now,
+		&userID,
+		nil,
+	); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"status": "error",
+			"message": "Failed to update achievement status",
+		})
+	}
+
+	// 🔥 WAJIB INSERT HISTORY
+		note := "Achievement verified by advisor"
+	if err := repository.AddAchievementHistory(
+		achievement.ID,
+		"verified",
+		&note, // ✅ pointer ke note yang benar
+		userID,
+	); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"status": "error",
+			"message": "Failed to insert history",
+		})
+	}
 
 	// 🔴 UPDATE STATUS DI MONGODB
 	if err := repository.UpdateAchievementMongo(
@@ -183,37 +217,39 @@ func VerifyAchievement(c *fiber.Ctx) error {
 
 // FR-008: Reject Achievement
 func RejectAchievement(c *fiber.Ctx) error {
-    achID, err := uuid.Parse(c.Params("id"))
-    if err != nil {
-        return c.Status(400).JSON(fiber.Map{
-            "status": "error",
-            "message": "Invalid achievement id",
-        })
-    }
+	achID, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"status": "error",
+			"message": "Invalid achievement id",
+		})
+	}
 
-    userID := c.Locals("user_id").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
 
-    type Request struct {
-        Note string `json:"note"`
-    }
+	// ===== BODY =====
+	type Request struct {
+		Note string `json:"note"`
+	}
 
-    var body Request
-    if err := c.BodyParser(&body); err != nil || body.Note == "" {
-        return c.Status(422).JSON(fiber.Map{
-            "status": "error",
-            "message": "Rejection note is required",
-        })
-    }
+	var body Request
+	if err := c.BodyParser(&body); err != nil || body.Note == "" {
+		return c.Status(422).JSON(fiber.Map{
+			"status": "error",
+			"message": "Rejection note is required",
+		})
+	}
 
-    achievement, err := repository.GetAchievementRefByID(achID)
-    if err != nil || achievement == nil {
-        return c.Status(404).JSON(fiber.Map{
-            "status": "error",
-            "message": "Achievement not found",
-        })
-    }
+	// ===== GET ACHIEVEMENT =====
+	achievement, err := repository.GetAchievementRefByID(achID)
+	if err != nil || achievement == nil {
+		return c.Status(404).JSON(fiber.Map{
+			"status": "error",
+			"message": "Achievement not found",
+		})
+	}
 
-    // GUARD FINAL STATE (SRS)
+	// ===== FINAL STATE GUARD (SRS) =====
 	if achievement.Status == "verified" {
 		return c.Status(409).JSON(fiber.Map{
 			"status": "error",
@@ -228,7 +264,6 @@ func RejectAchievement(c *fiber.Ctx) error {
 		})
 	}
 
-	// Only submitted allowed
 	if achievement.Status != "submitted" {
 		return c.Status(400).JSON(fiber.Map{
 			"status": "error",
@@ -236,25 +271,35 @@ func RejectAchievement(c *fiber.Ctx) error {
 		})
 	}
 
-    student, err := repository.GetStudentByID(achievement.StudentID)
-    if err != nil || student == nil {
-        return c.Status(404).JSON(fiber.Map{
-            "status": "error",
-            "message": "Student not found",
-        })
-    }
+	// ===== VALIDASI DOSEN WALI =====
+	student, err := repository.GetStudentByID(achievement.StudentID)
+	if err != nil || student == nil {
+		return c.Status(404).JSON(fiber.Map{
+			"status": "error",
+			"message": "Student not found",
+		})
+	}
 
-    if student.AdvisorID == nil || *student.AdvisorID != userID {
-        return c.Status(403).JSON(fiber.Map{
-            "status": "error",
-            "message": "You are not the advisor of this student",
-        })
-    }
+	lecturer, err := repository.GetLecturerByUserID(userID)
+	if err != nil || lecturer == nil {
+		return c.Status(403).JSON(fiber.Map{
+			"status": "error",
+			"message": "Lecturer not found",
+		})
+	}
 
-    now := time.Now()
+	if student.AdvisorID == nil || *student.AdvisorID != lecturer.ID {
+		return c.Status(403).JSON(fiber.Map{
+			"status": "error",
+			"message": "You are not the advisor of this student",
+		})
+	}
 
-    if err := repository.UpdateAchievementStatus(
-		achID,
+	now := time.Now()
+
+	// ===== UPDATE STATUS DI POSTGRES =====
+	if err := repository.UpdateAchievementStatus(
+		achievement.ID,
 		"rejected",
 		&now,
 		&userID,
@@ -266,7 +311,22 @@ func RejectAchievement(c *fiber.Ctx) error {
 		})
 	}
 
-	// 🔴 UPDATE STATUS DI MONGODB
+	// 🔥 WAJIB INSERT HISTORY
+	if err := repository.AddAchievementHistory(
+		achievement.ID,
+		"rejected",
+		&body.Note,
+		userID,
+	); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"status": "error",
+			"message": "Failed to insert history",
+		})
+	}
+
+
+
+	// ===== SYNC KE MONGODB =====
 	if err := repository.UpdateAchievementMongo(
 		achievement.MongoID,
 		bson.M{
@@ -280,10 +340,10 @@ func RejectAchievement(c *fiber.Ctx) error {
 		})
 	}
 
-    return c.JSON(fiber.Map{
-        "status": "success",
-        "message": "Achievement rejected successfully",
-    })
+	return c.JSON(fiber.Map{
+		"status": "success",
+		"message": "Achievement rejected successfully",
+	})
 }
 
 // GET DETAIL
@@ -484,7 +544,7 @@ func DeleteAchievement(c *fiber.Ctx) error {
 func GetAchievementHistory(c *fiber.Ctx) error {
 	refID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		return c.Status(400).JSON(fiber.Map{
 			"status":  "error",
 			"message": "invalid reference id",
 		})
@@ -492,7 +552,7 @@ func GetAchievementHistory(c *fiber.Ctx) error {
 
 	ref, err := repository.GetAchievementRefByID(refID)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		return c.Status(404).JSON(fiber.Map{
 			"status":  "error",
 			"message": "reference not found",
 		})
@@ -501,19 +561,13 @@ func GetAchievementHistory(c *fiber.Ctx) error {
 	role := c.Locals("role").(string)
 	userID := c.Locals("user_id").(uuid.UUID)
 
+	// 🔐 RBAC
 	switch role {
 
 	case "mahasiswa":
 		student, err := repository.GetStudentByUserID(userID)
-		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"status":  "error",
-				"message": "student record not found",
-			})
-		}
-
-		if ref.StudentID != student.ID {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		if err != nil || ref.StudentID != student.ID {
+			return c.Status(403).JSON(fiber.Map{
 				"status":  "error",
 				"message": "not your achievement",
 			})
@@ -522,32 +576,62 @@ func GetAchievementHistory(c *fiber.Ctx) error {
 	case "dosen_wali":
 		student, err := repository.GetStudentByID(ref.StudentID)
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			return c.Status(404).JSON(fiber.Map{
 				"status":  "error",
 				"message": "student not found",
 			})
 		}
+
 		lecturer, err := repository.GetLecturerByUserID(userID)
-		if err != nil {
-			return fiber.NewError(403, "lecturer record not found")
-		}
-		if student.AdvisorID == nil || *student.AdvisorID != lecturer.ID {
-			return fiber.NewError(403, "not your advisee")
+		if err != nil || student.AdvisorID == nil || *student.AdvisorID != lecturer.ID {
+			return c.Status(403).JSON(fiber.Map{
+				"status":  "error",
+				"message": "not your advisee",
+			})
 		}
 
 	case "admin":
 		// allowed
 
 	default:
-		return fiber.NewError(403, "role not allowed")
+		return c.Status(403).JSON(fiber.Map{
+			"status":  "error",
+			"message": "forbidden",
+		})
 	}
 
-	history, err := repository.GetAchievementHistory(ref.ID)
+	history, err := repository.GetAchievementHistoryByRefID(ref.ID)
 	if err != nil {
-		return fiber.NewError(500, "failed to fetch history")
+		return c.Status(500).JSON(fiber.Map{
+			"status":  "error",
+			"message": "failed to fetch history",
+		})
 	}
 
-	return c.JSON(history)
+	// ✅ RESPONSE SESUAI SRS
+	if len(history) == 0 {
+		return c.JSON(fiber.Map{
+			"status": "success",
+			"data":   []interface{}{},
+		})
+	}
+
+	// Mapping response agar rapi
+	var response []fiber.Map
+	for _, h := range history {
+		response = append(response, fiber.Map{
+			"id":        h.ID,
+			"status":    h.Status,
+			"note":      h.Note,
+			"actor_id":  h.UserID,
+			"timestamp": h.Timestamp,
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"status": "success",
+		"data":   response,
+	})
 }
 
 // UPLOAD ATTACHMENTS

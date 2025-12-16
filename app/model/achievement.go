@@ -41,10 +41,10 @@ type AchievementRef struct {
 }
 
 type AchievementHistory struct {
-    ID        uuid.UUID `json:"id"`
-    ReferenceID uuid.UUID `json:"reference_id"` // FK ke achievement_references.id
-    Status    string    `json:"status"`         // draft/submitted/verified/rejected
-    Note      string    `json:"note,omitempty"` // opsional, saat reject
-    UserID    uuid.UUID `json:"user_id"`        // siapa yang melakukan aksi
-    Timestamp time.Time `json:"timestamp"`
+	ID          uuid.UUID  `json:"id"`
+	ReferenceID uuid.UUID  `json:"reference_id"`
+	Status      string     `json:"status"`
+	Note        *string    `json:"note,omitempty"`     // ⬅️ pointer
+	UserID      *uuid.UUID `json:"user_id,omitempty"` // ⬅️ pointer
+	Timestamp   time.Time  `json:"timestamp"`
 }
