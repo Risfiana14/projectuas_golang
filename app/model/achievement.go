@@ -25,6 +25,7 @@ type Achievement struct {
     Status      string    `json:"status" bson:"status"`
     CreatedAt   time.Time `json:"created_at" bson:"created_at"`
     UpdatedAt   time.Time `json:"updated_at" bson:"updated_at"`
+    Attachments []Attachment `bson:"attachments"`
 }
 
 type AchievementRef struct {
@@ -47,4 +48,11 @@ type AchievementHistory struct {
 	Note        *string    `json:"note,omitempty"`     // ⬅️ pointer
 	UserID      *uuid.UUID `json:"user_id,omitempty"` // ⬅️ pointer
 	Timestamp   time.Time  `json:"timestamp"`
+}
+
+type Attachment struct {
+    FileName   string    `bson:"fileName" json:"fileName"`
+    FileURL    string    `bson:"fileUrl" json:"fileUrl"`
+    FileType   string    `bson:"fileType" json:"fileType"`
+    UploadedAt time.Time `bson:"uploadedAt" json:"uploadedAt"`
 }

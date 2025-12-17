@@ -359,8 +359,50 @@ func GetAchievementDetail(c *fiber.Ctx) error {
 	}
 
 	ach, err := repository.GetAchievementMongoByID(ref.MongoID)
+	if ach.Attachments == nil {
+		ach.Attachments = []model.Attachment{}
+	}
+
 	if err != nil {
-		return fiber.NewError(http.StatusInternalServerError, "Gagal mengambil data MongoDB")
+		return fiber.NewError(http.StatusInternalServerError, "Failed to fetch MongoDB achievement")
+	}
+
+	role := c.Locals("role").(string)
+	userID := c.Locals("user_id").(uuid.UUID)
+
+	switch role {
+	case "mahasiswa":
+		student, err := repository.GetStudentByUserID(userID)
+		if err != nil || ref.StudentID != student.ID {
+			return c.Status(403).JSON(fiber.Map{
+				"status":  "error",
+				"message": "Not your achievement",
+			})
+		}
+
+	case "dosen_wali":
+		student, err := repository.GetStudentByID(ref.StudentID)
+		if err != nil {
+			return c.Status(404).JSON(fiber.Map{
+				"status":  "error",
+				"message": "Student not found",
+			})
+		}
+		lecturer, err := repository.GetLecturerByUserID(userID)
+		if err != nil || student.AdvisorID == nil || *student.AdvisorID != lecturer.ID {
+			return c.Status(403).JSON(fiber.Map{
+				"status":  "error",
+				"message": "Not your advisee's achievement",
+			})
+		}
+
+	case "admin":
+		// allowed
+	default:
+		return c.Status(403).JSON(fiber.Map{
+			"status":  "error",
+			"message": "Forbidden",
+		})
 	}
 
 	return c.JSON(fiber.Map{"reference": ref, "achievement": ach})
@@ -636,36 +678,111 @@ func GetAchievementHistory(c *fiber.Ctx) error {
 
 // UPLOAD ATTACHMENTS
 func UploadAchievementAttachments(c *fiber.Ctx) error {
-	refID, err := uuid.Parse(c.Params("id"))
+    refID := c.Params("id")
+    if refID == "" {
+        return c.Status(400).JSON(fiber.Map{
+            "status":  "error",
+            "message": "invalid achievement id",
+        })
+    }
+
+    userID := c.Locals("user_id").(uuid.UUID)
+    role := c.Locals("role").(string)
+
+    // Ambil reference
+    ref, err := repository.GetAchievementRefByID(uuid.MustParse(refID))
+    if err != nil {
+        return c.Status(404).JSON(fiber.Map{
+            "status":  "error",
+            "message": "achievement not found",
+        })
+    }
+		
+	// 🔒 VALIDASI STATUS SESUAI SRS (WAJIB)
+	if ref.Status != "draft" {
+		return c.Status(400).JSON(fiber.Map{
+			"status":  "error",
+			"message": "attachments can only be uploaded when achievement is in draft status",
+		})
+	}
+
+    // Validasi mahasiswa
+    if role == "mahasiswa" {
+        student, err := repository.GetStudentByUserID(userID)
+        if err != nil || ref.StudentID != student.ID {
+            return c.Status(403).JSON(fiber.Map{
+                "status":  "error",
+                "message": "cannot upload attachment to other student's achievement",
+            })
+        }
+    }
+
+    // Ambil semua file
+    form, err := c.MultipartForm()
+    if err != nil || len(form.File["files"]) == 0 {
+        return c.Status(400).JSON(fiber.Map{
+            "status":  "error",
+            "message": "no files uploaded",
+        })
+    }
+
+    ach, err := repository.GetAchievementMongoByID(ref.MongoID)
 	if err != nil {
-		return fiber.NewError(400, "invalid achievement id")
+		return c.Status(500).JSON(fiber.Map{
+			"status":  "error",
+			"message": "failed to get achievement",
+		})
 	}
 
-	role := c.Locals("role").(string)
-	userID := c.Locals("user_id").(uuid.UUID)
-
-	ref, err := repository.GetAchievementRefByID(refID)
-	if err != nil {
-		return fiber.NewError(404, "achievement not found")
+	if ach.Attachments == nil {
+		ach.Attachments = []model.Attachment{}
 	}
 
-	if role == "mahasiswa" {
-		student, err := repository.GetStudentByUserID(userID)
-		if err != nil {
-			return fiber.NewError(403, "student record not found")
-		}
+    // Upload semua file
+    for _, fileHeader := range form.File["files"] {
+    file, err := fileHeader.Open()
+    if err != nil {
+        continue
+    }
 
-		if ref.StudentID != student.ID {
-			return c.Status(403).JSON(fiber.Map{
-				"status":  "error",
-				"message": "cannot upload attachment to other student's achievement",
-			})
-		}
-	}
+    func() {
+        defer file.Close()
 
-	return c.JSON(fiber.Map{
-		"status":  "success",
-		"message": "attachment uploaded successfully",
-	})
+        data := make([]byte, fileHeader.Size)
+        file.Read(data)
+
+        url, err := repository.SaveAttachment(ref.MongoID, fileHeader.Filename, data)
+        if err != nil {
+            return
+        }
+
+        ach.Attachments = append(ach.Attachments, model.Attachment{
+            FileName:   fileHeader.Filename,
+            FileURL:    url,
+            FileType:   fileHeader.Header.Get("Content-Type"),
+            UploadedAt: time.Now(),
+        })
+    }()
 }
 
+    // Update MongoDB
+    err = repository.UpdateAchievementMongo(ref.MongoID, bson.M{
+        "attachments": ach.Attachments,
+        "updated_at":  time.Now(),
+    })
+    if err != nil {
+        return c.Status(500).JSON(fiber.Map{
+            "status":  "error",
+            "message": "failed to save attachments",
+        })
+    }
+
+    return c.JSON(fiber.Map{
+		"status":  "success",
+		"message": "attachments uploaded successfully",
+		"data": fiber.Map{
+			"count":       len(ach.Attachments),
+			"attachments": ach.Attachments,
+    	},
+	})
+}

@@ -23,11 +23,17 @@ func achievementsColl() *mongo.Collection {
 
 // CREATE
 func InsertAchievementMongo(ach *model.Achievement) (string, error) {
-    // Mongo will generate ObjectID automatically
+
+    // ✅ SRS: attachments default empty array
+    if ach.Attachments == nil {
+        ach.Attachments = []model.Attachment{}
+    }
+
     res, err := achievementsColl().InsertOne(context.TODO(), ach)
     if err != nil {
         return "", err
     }
+
     oid := res.InsertedID.(primitive.ObjectID).Hex()
     return oid, nil
 }
@@ -52,6 +58,11 @@ func UpdateAchievementMongo(id string, update bson.M) error {
     oid, err := primitive.ObjectIDFromHex(id)
     if err != nil {
         return err
+    }
+
+    // 🔒 Guard agar attachments tidak null
+    if v, ok := update["attachments"]; ok && v == nil {
+        delete(update, "attachments")
     }
 
     _, err = achievementsColl().UpdateOne(
