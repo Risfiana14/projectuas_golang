@@ -290,6 +290,55 @@ func GetAchievementsByStudents(studentIDs []uuid.UUID) ([]*model.AchievementRef,
 	return results, nil
 }
 
+// Get achievements by advisor's user ID
+func GetAchievementsByAdvisorUserID(advisorUserID uuid.UUID) ([]*model.AchievementRef, error) {
+	rows, err := DB.Query(`
+		SELECT 
+			ar.id,
+			ar.student_id,
+			ar.mongo_achievement_id,
+			ar.status,
+			ar.submitted_at,
+			ar.verified_at,
+			ar.verified_by,
+			ar.rejection_note,
+			ar.created_at,
+			ar.updated_at
+		FROM achievement_references ar
+		JOIN students s ON ar.student_id = s.id
+		JOIN lecturers l ON s.advisor_id = l.id
+		WHERE l.user_id = $1
+		ORDER BY ar.created_at DESC
+	`, advisorUserID)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*model.AchievementRef
+	for rows.Next() {
+		var ar model.AchievementRef
+		if err := rows.Scan(
+			&ar.ID,
+			&ar.StudentID,
+			&ar.MongoID,
+			&ar.Status,
+			&ar.SubmittedAt,
+			&ar.VerifiedAt,
+			&ar.VerifiedBy,
+			&ar.RejectionNote,
+			&ar.CreatedAt,
+			&ar.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		list = append(list, &ar)
+	}
+
+	return list, nil
+}
+
 // Update status helper (Postgres)
 func UpdateAchievementStatus(
     refID uuid.UUID,

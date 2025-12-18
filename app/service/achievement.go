@@ -436,22 +436,7 @@ func GetAllAchievements(c *fiber.Ctx) error {
 		refs, err = repository.GetAllAchievementRefs()
 
 	case "dosen_wali":
-		// 1. Ambil mahasiswa bimbingan dosen
-		students, err := repository.GetStudentsByAdvisor(userID)
-		if err != nil {
-			return c.Status(500).JSON(fiber.Map{
-				"status": "error",
-				"message": "failed to get advisees",
-			})
-		}
-
-		var studentIDs []uuid.UUID
-		for _, s := range students {
-			studentIDs = append(studentIDs, s.ID)
-		}
-
-		// 2. Ambil achievement mereka
-		refs, err = repository.GetAchievementsByStudents(studentIDs)
+		refs, err = repository.GetAchievementsByAdvisorUserID(userID)
 
 	default:
 		return c.Status(403).JSON(fiber.Map{
@@ -467,20 +452,11 @@ func GetAllAchievements(c *fiber.Ctx) error {
 		})
 	}
 
-	if len(refs) == 0 {
-		return c.JSON(fiber.Map{
-			"status":  "success",
-			"message": "No achievements available",
-			"data":    []interface{}{},
-		})
-	}
-
 	return c.JSON(fiber.Map{
 		"status": "success",
 		"data":   refs,
 	})
 }
-
 
 // UPDATE (only draft)
 func UpdateAchievement(c *fiber.Ctx) error {
