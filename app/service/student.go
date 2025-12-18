@@ -105,7 +105,7 @@ func GetStudentAchievements(c *fiber.Ctx) error {
 
     // ✅ PASTIKAN TIDAK NIL
     if refs == nil {
-        refs = []model.AchievementRef{}
+        refs = []*model.AchievementRef{}
     }
 
     // ✅ TAMBAHAN MESSAGE JIKA KOSONG

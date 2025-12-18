@@ -437,7 +437,19 @@ func GetAllAchievements(c *fiber.Ctx) error {
 
 	case "dosen_wali":
 		refs, err = repository.GetAchievementsByAdvisorUserID(userID)
+	
+	case "mahasiswa":
+		// 🔥 INI YANG HILANG
+		student, err := repository.GetStudentByUserID(userID)
+		if err != nil {
+			return c.Status(403).JSON(fiber.Map{
+				"status":  "error",
+				"message": "student not found",
+			})
+		}
 
+		refs, err = repository.GetAchievementRefsByStudentID(student.ID)
+		
 	default:
 		return c.Status(403).JSON(fiber.Map{
 			"status": "error",

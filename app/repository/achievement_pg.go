@@ -11,37 +11,47 @@ import (
 	"projectuas/app/model"
 )
 
-// NOTE: file ini mengasumsikan ada var DB *sql.DB dideklarasikan di paket repository (inisialisasi di database.ConnectPostgres()).
-
 // GET ACHIEVEMENT REFS BY STUDENT ID
-func GetAchievementRefsByStudentID(studentID uuid.UUID) ([]model.AchievementRef, error) {
-	rows, err := DB.Query(`
-        SELECT id, student_id, mongo_achievement_id, status, submitted_at, verified_at,
-               verified_by, rejection_note, created_at, updated_at
+func GetAchievementRefsByStudentID(studentID uuid.UUID) ([]*model.AchievementRef, error) {
+    rows, err := DB.Query(`
+        SELECT id, student_id, mongo_achievement_id, status,
+               submitted_at, verified_at, verified_by,
+               rejection_note, created_at, updated_at
         FROM achievement_references
-        WHERE student_id=$1
-		AND status IN ('submitted', 'verified', 'rejected')
-        ORDER BY created_at DESC
-    `, studentID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+        WHERE student_id = $1
+		AND status != 'deleted'
 
-	list := []model.AchievementRef{}
-	for rows.Next() {
-			var ref model.AchievementRef
-			err := rows.Scan(&ref.ID, &ref.StudentID, &ref.MongoID, &ref.Status,
-				&ref.SubmittedAt, &ref.VerifiedAt, &ref.VerifiedBy,
-				&ref.RejectionNote, &ref.CreatedAt, &ref.UpdatedAt)
-			if err != nil {
-				return nil, err
-			}
-			list = append(list, ref)
-		}
-	return list, nil
+    `, studentID)
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+    refs := []*model.AchievementRef{}
+
+    for rows.Next() {
+        var ref model.AchievementRef
+        if err := rows.Scan(
+            &ref.ID,
+            &ref.StudentID,
+            &ref.MongoID,
+            &ref.Status,
+            &ref.SubmittedAt,
+            &ref.VerifiedAt,
+            &ref.VerifiedBy,
+            &ref.RejectionNote,
+            &ref.CreatedAt,
+            &ref.UpdatedAt,
+        ); err != nil {
+            return nil, err
+        }
+        refs = append(refs, &ref)
+    }
+
+    return refs, nil
 }
 
+// CREATE ACHIEVEMENT REFERENCE
 func CreateAchievementReference(id uuid.UUID, studentID uuid.UUID, mongoID string) error {
 	_, err := DB.Exec(`
         INSERT INTO achievement_references 
@@ -87,21 +97,18 @@ func GetAchievementRefByID(id uuid.UUID) (*model.AchievementRef, error) {
 
 // GET REF BY USER (alias GetAchievementRefsByUser)
 func GetAchievementRefsByUser(userID uuid.UUID) ([]*model.AchievementRef, error) {
-    student, err := GetStudentByUserID(userID)
-    if err != nil {
-        return nil, err
-    }
+	student, err := GetStudentByUserID(userID)
+	if err != nil {
+		return nil, err
+	}
 
-    refs, err := GetAchievementRefsByStudentID(student.ID)
-    if err != nil {
-        return nil, err
-    }
+	refs, err := GetAchievementRefsByStudentID(student.ID)
+	if err != nil {
+		return nil, err
+	}
 
-    var ptrs []*model.AchievementRef
-    for i := range refs {
-        ptrs = append(ptrs, &refs[i])
-    }
-    return ptrs, nil
+	// refs SUDAH []*model.AchievementRef
+	return refs, nil
 }
 
 // GET ALL REFS
@@ -253,7 +260,7 @@ func GetAchievementStatistics() (map[string]int, error) {
 }
 
 // GET STUDENT REPORT (returns refs)
-func GetStudentReport(studentID uuid.UUID) ([]model.AchievementRef, error) {
+func GetStudentReport(studentID uuid.UUID) ([]*model.AchievementRef, error) {
 	return GetAchievementRefsByStudentID(studentID)
 }
 
@@ -308,6 +315,7 @@ func GetAchievementsByAdvisorUserID(advisorUserID uuid.UUID) ([]*model.Achieveme
 		JOIN students s ON ar.student_id = s.id
 		JOIN lecturers l ON s.advisor_id = l.id
 		WHERE l.user_id = $1
+		AND ar.status IN ('submitted', 'verified', 'rejected')
 		ORDER BY ar.created_at DESC
 	`, advisorUserID)
 
