@@ -11,6 +11,14 @@ import (
 )
 
 // GET LECTURERS
+// GetLecturers godoc
+// @Summary Get lecturers
+// @Description Get list of lecturers
+// @Tags Lecturers
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {array} model.Lecturer
+// @Router /lecturers [get]
 func GetLecturers(c *fiber.Ctx) error {
     list, err := repository.GetLecturers()
     if err != nil {
@@ -20,6 +28,16 @@ func GetLecturers(c *fiber.Ctx) error {
 }
 
 // GET ADVISEES BY LECTURER
+// GetLecturerAdvisees godoc
+// @Summary Get lecturer advisees
+// @Description Lecturer view list of advised students
+// @Tags Lecturers
+// @Security BearerAuth
+// @Param id path string true "Lecturer ID"
+// @Produce json
+// @Success 200 {array} model.Student
+// @Failure 403 {object} map[string]string
+// @Router /lecturers/{id}/advisees [get]
 func GetLecturerAdvisees(c *fiber.Ctx) error {
     lectID, err := uuid.Parse(c.Params("id"))
     if err != nil {
@@ -44,6 +62,16 @@ func GetLecturerAdvisees(c *fiber.Ctx) error {
 }
 
 // GET PENDING ACHIEVEMENTS
+
+// GetPendingAchievements godoc
+// @Summary Get pending achievements
+// @Description Admin sees all submitted achievements, dosen wali sees only advisees' submitted achievements
+// @Tags Achievements
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {array} model.AchievementRef
+// @Failure 403 {object} map[string]string
+// @Router /achievements/pending [get]
 func GetPendingAchievements(c *fiber.Ctx) error {
     role := c.Locals("role").(string)
     callerID := c.Locals("user_id").(uuid.UUID)
@@ -81,6 +109,18 @@ func GetPendingAchievements(c *fiber.Ctx) error {
 
 
 // FR-006: View Prestasi Mahasiswa Bimbingan
+
+// GetLecturerAchievements godoc
+// @Summary View achievements of a lecturer's advisees
+// @Description Lecturer can view submitted achievements of their advisees
+// @Tags Achievements
+// @Security BearerAuth
+// @Param id path string true "Lecturer ID"
+// @Produce json
+// @Success 200 {array} model.AchievementRef
+// @Failure 403 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Router /lecturers/{id}/achievements [get]
 func GetLecturerAchievements(c *fiber.Ctx) error {
     lectID, err := uuid.Parse(c.Params("id"))
     if err != nil {

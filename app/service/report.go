@@ -10,6 +10,14 @@ import (
 )
 
 // GET ACHIEVEMENT STATISTICS
+// GetAchievementStatistics godoc
+// @Summary Achievement statistics
+// @Description Get achievement analytics
+// @Tags Reports
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /reports/statistics [get]
 func GetAchievementStatistics(c *fiber.Ctx) error {
 	stats, err := repository.GetAchievementStatistics()
 	if err != nil {
@@ -19,6 +27,18 @@ func GetAchievementStatistics(c *fiber.Ctx) error {
 }
 
 // GET STUDENT REPORT
+
+// GetStudentReport godoc
+// @Summary Get report of a student
+// @Description Get submitted achievements of a specific student
+// @Tags Reports
+// @Security BearerAuth
+// @Param id path string true "Student ID"
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /reports/students/{id} [get]
 func GetStudentReport(c *fiber.Ctx) error {
 	studentID, err := uuid.Parse(c.Params("id"))
 	if err != nil {

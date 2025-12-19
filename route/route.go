@@ -6,6 +6,8 @@ import (
 	"projectuas/middleware"
 	"projectuas/database"
 	"projectuas/app/repository"
+
+	"github.com/gofiber/swagger"
 )
 
 func Setup(app *fiber.App) {
@@ -20,6 +22,7 @@ func Setup(app *fiber.App) {
 	auth.Post("/login", service.Login)
 	auth.Post("/refresh", service.Refresh)
 	auth.Post("/logout", service.Logout)
+	auth.Get("/profile", middleware.JWT(), service.Profile)
 
 	// --- PROTECTED (JWT untuk semua user) ---
 	api := app.Group("/api/v1", middleware.JWT())
@@ -65,4 +68,8 @@ func Setup(app *fiber.App) {
 	reports := api.Group("/reports")
 	reports.Get("/statistics", middleware.Role("admin"), service.GetAchievementStatistics)
 	reports.Get("/student/:id", middleware.Role("admin"), service.GetStudentReport)
+
+	// --- Swagger ---
+    app.Get("/swagger/*", swagger.HandlerDefault)
 }
+

@@ -3,22 +3,34 @@ package service
 import (
 	"log"
 	"os"
-	"strings"
-	"time"
 	"projectuas/app/model"
 	"projectuas/app/repository"
+	"time"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
-func Login(c *fiber.Ctx) error {
-	type LoginRequest struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
+// --- LOGIN REQUEST STRUCT (global, untuk Swagger) ---
+type LoginRequest struct {
+	Username string `json:"username" example:"user123"`
+	Password string `json:"password" example:"secret"`
+}
 
+// Login godoc
+// @Summary Login user
+// @Description Login dan mendapatkan JWT token
+// @Tags Auth
+// @Accept json
+// @Produce json
+// @Param login body LoginRequest true "Login payload"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Router /auth/login [post]
+func Login(c *fiber.Ctx) error {
 	var req LoginRequest
 	if err := c.BodyParser(&req); err != nil {
 		log.Println("ERROR: Body parser:", err)
@@ -50,7 +62,7 @@ func Login(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{"status": "error", "message": "Internal server error"})
 	}
 
-	// Create JWT
+	// --- Create JWT ---
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, model.Claims{
 		UserID: user.ID,
 		Role:   role.Name,
@@ -60,7 +72,7 @@ func Login(c *fiber.Ctx) error {
 	})
 	tokenString, _ := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
 
-	// Refresh token
+	// --- Create Refresh Token ---
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, model.Claims{
 		UserID: user.ID,
 		Role:   role.Name,
@@ -86,6 +98,15 @@ func Login(c *fiber.Ctx) error {
 	})
 }
 
+// Logout godoc
+// @Summary Logout user
+// @Description Logout user and invalidate token (optional blacklist)
+// @Tags Authentication
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Router /auth/logout [post]
 func Logout(c *fiber.Ctx) error {
 	authHeader := c.Get("Authorization")
 	if authHeader == "" {
@@ -96,6 +117,15 @@ func Logout(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"status": "success", "message": "Logout berhasil"})
 }
 
+// Refresh godoc
+// @Summary Refresh JWT token
+// @Description Refresh access token using current valid token
+// @Tags Authentication
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 401 {object} map[string]string
+// @Router /auth/refresh [post]
 func Refresh(c *fiber.Ctx) error {
 	authHeader := c.Get("Authorization")
 	if authHeader == "" {

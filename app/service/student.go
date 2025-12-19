@@ -10,7 +10,15 @@ import (
 	"projectuas/app/model"
 )
 
-// GET STUDENTS
+// GetStudents godoc
+// @Summary Get all students
+// @Description Admin get list of all students
+// @Tags Students
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 403 {object} map[string]string
+// @Router /students [get]
 func GetStudents(c *fiber.Ctx) error {
 	role := c.Locals("role").(string)
 
@@ -34,6 +42,16 @@ func GetStudents(c *fiber.Ctx) error {
 }
 
 // GET STUDENT DETAIL
+// GetStudentDetail godoc
+// @Summary Get student detail
+// @Description Get detail of a student
+// @Tags Students
+// @Security BearerAuth
+// @Param id path string true "Student ID"
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]string
+// @Router /students/{id} [get]
 func GetStudentDetail(c *fiber.Ctx) error {
     studentID, err := uuid.Parse(c.Params("id"))
     if err != nil {
@@ -57,7 +75,18 @@ func GetStudentDetail(c *fiber.Ctx) error {
 	})
 }
 
-// GET STUDENT ACHIEVEMENTS
+// GetStudentAchievements godoc
+// @Summary Get student achievements
+// @Description Admin or advisor can view student's achievements
+// @Tags Students
+// @Security BearerAuth
+// @Param id path string true "Student ID"
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /students/{id}/achievements [get]
 func GetStudentAchievements(c *fiber.Ctx) error {
     role := c.Locals("role").(string)
     userID := c.Locals("user_id").(uuid.UUID)
@@ -124,7 +153,18 @@ func GetStudentAchievements(c *fiber.Ctx) error {
     })
 }
 
-// ASSIGN ADVISOR
+// AssignAdvisor godoc
+// @Summary Assign advisor to student
+// @Description Admin assign dosen wali to student
+// @Tags Students
+// @Security BearerAuth
+// @Param id path string true "Student ID"
+// @Accept json
+// @Produce json
+// @Param body body object{advisor_id=string} true "Advisor ID"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Router /students/{id}/advisor [put]
 func AssignAdvisor(c *fiber.Ctx) error {
     studentID, err := uuid.Parse(c.Params("id"))
     if err != nil {

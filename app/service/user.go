@@ -15,6 +15,14 @@ func hashPassword(pw string) (string, error) {
 }
 
 // GET /api/v1/users
+// AdminGetUsers godoc
+// @Summary Get all users
+// @Description Admin get list of users
+// @Tags Users
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {array} model.User
+// @Router /users [get]
 func AdminGetUsers(c *fiber.Ctx) error {
 	users, err := repository.GetAllUsers()
 	if err != nil {
@@ -24,6 +32,18 @@ func AdminGetUsers(c *fiber.Ctx) error {
 }
 
 // GET /api/v1/users/:id
+
+// AdminGetUserDetail godoc
+// @Summary Get user detail
+// @Description Admin get detail of a specific user
+// @Tags Users
+// @Security BearerAuth
+// @Produce json
+// @Param id path string true "User ID"
+// @Success 200 {object} model.User
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /users/{id} [get]
 func AdminGetUserDetail(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -39,6 +59,19 @@ func AdminGetUserDetail(c *fiber.Ctx) error {
 }
 
 // POST /api/v1/users
+
+// AdminCreateUser godoc
+// @Summary Create new user
+// @Description Admin creates a new user
+// @Tags Users
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param user body object{username=string,email=string,password=string,full_name=string,role_id=string,is_active=boolean} true "User data"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /users [post]
 func AdminCreateUser(c *fiber.Ctx) error {
 	var req struct {
 		Username string `json:"username"`
@@ -95,6 +128,21 @@ func AdminCreateUser(c *fiber.Ctx) error {
 
 
 // PUT /api/v1/users/:id
+
+// AdminUpdateUser godoc
+// @Summary Update user
+// @Description Admin updates an existing user
+// @Tags Users
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path string true "User ID"
+// @Param user body object{username=string,email=string,full_name=string,role_id=string,is_active=boolean} true "Updated user data"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /users/{id} [put]
 func AdminUpdateUser(c *fiber.Ctx) error {
 	userID, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -154,6 +202,18 @@ func AdminUpdateUser(c *fiber.Ctx) error {
 }
 
 // DELETE /api/v1/users/:id
+
+// AdminDeleteUser godoc
+// @Summary Delete user
+// @Description Admin deletes a user by ID
+// @Tags Users
+// @Security BearerAuth
+// @Produce json
+// @Param id path string true "User ID"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /users/{id} [delete]
 func AdminDeleteUser(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
@@ -168,6 +228,21 @@ func AdminDeleteUser(c *fiber.Ctx) error {
 }
 
 // PUT /api/v1/users/:id/role
+
+// AdminUpdateUserRole godoc
+// @Summary Update user role
+// @Description Admin updates role of a user
+// @Tags Users
+// @Security BearerAuth
+// @Accept json
+// @Produce json
+// @Param id path string true "User ID"
+// @Param body body object{role_id=string} true "New role ID"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /users/{id}/role [put]
 func AdminUpdateUserRole(c *fiber.Ctx) error {
 	userIDParam := c.Params("id")
 	userID, err := uuid.Parse(userIDParam)
@@ -214,6 +289,17 @@ func AdminUpdateUserRole(c *fiber.Ctx) error {
 }
 
 // GET /api/v1/auth/profile
+
+// Profile godoc
+// @Summary Get profile
+// @Description Get logged-in user profile
+// @Tags Authentication
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} model.User
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /auth/profile [get]
 func Profile(c *fiber.Ctx) error {
 	userID := c.Locals("user_id")
 	id, ok := userID.(uuid.UUID)
